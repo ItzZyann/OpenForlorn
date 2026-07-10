@@ -3,11 +3,11 @@
 
 class FL_MenuLayer : public CCLayer {
 public:
-	virtual bool init();
-	virtual void keyBackClicked();
+    virtual bool init();
+    virtual void keyBackClicked();
 
-	void onExitGame(CCObject*);
-	void onPlay(CCObject*);
+    void onExitGame(CCObject* sender);
+    void onSelectLevel(CCObject* sender);
 
-	CREATE_FUNC(FL_MenuLayer);
+    CREATE_FUNC(FL_MenuLayer);
 };
