@@ -1,0 +1,1 @@
+Here are the needed files that needs to be edited inside cocos2d-x.

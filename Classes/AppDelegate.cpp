@@ -13,12 +13,11 @@ bool AppDelegate::applicationDidFinishLaunching() {
 	CCDirector* pDirector = CCDirector::sharedDirector();
 	CCEGLView* pEGLView = CCEGLView::sharedOpenGLView();
 
-	pDirector->setOpenGLView(pEGLView);
-
 	#if (CC_TARGET_PLATFORM == CC_PLATFORM_WIN32)
 		CCFileUtils::sharedFileUtils()->addSearchPath("Resources");
 	#endif
 
+	pDirector->setOpenGLView(pEGLView);
 	pDirector->setDisplayStats(true);
 	pDirector->setAnimationInterval(1.0 / 60);
 

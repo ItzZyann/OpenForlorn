@@ -29,16 +29,10 @@ bool FL_MenuLayer::init() {
 
     const CCSize winSize = CCDirector::sharedDirector()->getWinSize();
 
-    // Scale UI offsets relative to the 960x520 design size so the layout
-    // looks identical on Windows and Mac regardless of actual window size.
-    const float scaleX = winSize.width  / 960.0f;
-    const float scaleY = winSize.height / 520.0f;
-
-    // Render the cave level as a non-interactive animated menu background.
     FL_PlayLayer::Args previewArgs;
     previewArgs.levelFile = "LevelCave.plist";
     previewArgs.previewMode = true;
-    previewArgs.initialZoom = 1.5f;
+    previewArgs.initialZoom = 1.8f;
 
     FL_PlayLayer* cavePreview = FL_PlayLayer::create(previewArgs);
     if (cavePreview) {
@@ -49,22 +43,22 @@ bool FL_MenuLayer::init() {
     CCSprite* logo = CCSprite::create("forlorn_logo_menu.png");
     if (logo) {
         logo->setScale(0.48f);
-        logo->setPosition(ccp(winSize.width / 2.0f, winSize.height - 75.0f * scaleY));
+        logo->setPosition(ccp(winSize.width / 2.0f, winSize.height - 75.0f));
         addChild(logo);
     }
 
     CCLabelBMFont* title = CCLabelBMFont::create("SELECT LEVEL", "bigFont.fnt");
     title->setScale(0.55f);
     title->setColor(ccc3(255, 220, 80));
-    title->setPosition(ccp(winSize.width / 2.0f, winSize.height - 135.0f * scaleY));
+    title->setPosition(ccp(winSize.width / 2.0f, winSize.height - 135.0f));
     addChild(title);
 
     CCMenu* menu = CCMenu::create();
     menu->setPosition(CCPointZero);
     addChild(menu);
 
-    const float startY  = winSize.height - 185.0f * scaleY;
-    const float spacing = 38.0f * scaleY;
+    const float startY  = winSize.height - 185.0f;
+    const float spacing = 38.0f;
     for (int index = 0; index < 6; ++index) {
         CCMenuItemLabel* item = createLevelItem(
             kLevelFiles[index], this, menu_selector(FL_MenuLayer::onSelectLevel), index
@@ -79,7 +73,7 @@ bool FL_MenuLayer::init() {
     CCMenuItemLabel* exitItem = CCMenuItemLabel::create(
         exitLabel, this, menu_selector(FL_MenuLayer::onExitGame)
     );
-    exitItem->setPosition(ccp(winSize.width / 2.0f, startY - spacing * 6 - 8.0f * scaleY));
+    exitItem->setPosition(ccp(winSize.width / 2.0f, startY - spacing * 6 - 8.0f));
     menu->addChild(exitItem);
 
     return true;

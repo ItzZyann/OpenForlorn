@@ -1,12 +1,8 @@
-﻿// ── Windows / MSVC compatibility (safe to compile on Mac / Linux) ────────────
-// NOMINMAX prevents <windows.h> from defining min/max as macros, which breaks
-// every std::max / std::min call. The guard is Windows-only; Mac/Linux skip it.
-#if defined(_WIN32) || defined(_WIN64)
+﻿#if defined(_WIN32) || defined(_WIN64)
 #  ifndef NOMINMAX
 #    define NOMINMAX
 #  endif
 #endif
-// ─────────────────────────────────────────────────────────────────────────────
 
 #include "FL_Player.h"
 
