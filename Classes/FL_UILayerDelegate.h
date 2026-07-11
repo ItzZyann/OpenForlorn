@@ -17,6 +17,7 @@ public:
 	virtual void uiDownReleased() = 0;
 
 	virtual void uiMenuPressed() = 0;
+	virtual void uiStancePressed() = 0;
 	virtual void uiPauseRestartPressed() = 0;
 	virtual void uiPauseQuitPressed() = 0;
 	virtual void uiPauseSoundPressed() = 0;

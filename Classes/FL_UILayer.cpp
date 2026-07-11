@@ -642,7 +642,10 @@ FL_UILayer::Direction FL_UILayer::hitTest(const CCPoint& loc) {
 
     if (m_jumpSprite && m_jumpSprite->isVisible() && m_jumpSprite->boundingBox().containsPoint(loc)) return DIR_UP;
     if (m_attackSprite && m_attackSprite->isVisible() && m_attackSprite->boundingBox().containsPoint(loc)) return DIR_DOWN;
-    return DIR_NONE;
+
+    // Pseudocode ControlLayer sends pushButton:7 when the touch is not on any
+    // gameplay button.  Player::pushButton: handles button 7 by switchStance.
+    return DIR_STANCE;
 }
 
 void FL_UILayer::pressDirection(Direction dir) {
@@ -669,6 +672,9 @@ void FL_UILayer::pressDirection(Direction dir) {
         setPressedVisual(m_menuSprite, true, 1.0f);
         setPauseVisible(true);
         if (m_delegate) m_delegate->uiMenuPressed();
+        break;
+    case DIR_STANCE:
+        if (m_delegate) m_delegate->uiStancePressed();
         break;
     case DIR_PAUSE_RESUME:
         setPressedVisual(m_pauseResumeSprite, true, m_pauseButtonScale);
@@ -716,6 +722,8 @@ void FL_UILayer::releaseDirection(Direction dir, bool activate) {
         break;
     case DIR_MENU:
         setPressedVisual(m_menuSprite, false, 1.0f);
+        break;
+    case DIR_STANCE:
         break;
     case DIR_PAUSE_RESUME:
         setPressedVisual(m_pauseResumeSprite, false, m_pauseButtonScale);

@@ -6,10 +6,14 @@
 
 #include "FL_PlayLayer.h"
 #include "FL_MenuLayer.h"
+#include "FL_LevelScene.h"
 #include "FL_UILayer.h"
 #include "FL_Player.h"
+#include "particles/FL_PlayerParticles.h"
+#include "particles/FL_ProjectileBreakParticles.h"
 #include "FL_CollisionWorld.h"
 #include "JsonUtils.h"
+#include "Triggers/FL_TriggerSystem.h"
 
 #include "rapidjson/document.h"
 #include "rapidjson/error/error.h"
@@ -42,6 +46,7 @@ namespace {
 
 	struct LevelObject {
 		std::string id;
+		std::string groupID;
 		std::string objectType;
 		FL_Block::Data data;
 		std::vector<CCPoint> collisionPoints;
@@ -76,52 +81,6 @@ namespace {
 		}
 	};
 
-	struct CameraTriggerData {
-		std::string id;
-		CCRect bounds;
-		CCPoint cameraOffset;
-		CCPoint targetPosition;
-		std::string cameraLockType;
-		std::string offsetEasingType;
-		std::string zoomEasingType;
-		float zoomTarget;
-		float offsetDuration;
-		float zoomDuration;
-		float triggerDelay;
-		int pUID;
-		bool hasCameraOffset;
-		bool hasTargetPosition;
-		bool hasZoomTarget;
-		bool calledByEvent;
-		bool lockCamera;
-		bool instantMove;
-		bool instantZoom;
-		bool wasInside;
-		bool firedThisVisit;
-		float insideTime;
-
-		CameraTriggerData()
-			: bounds(CCRect(0.0f, 0.0f, 0.0f, 0.0f))
-			, cameraOffset(CCPointZero)
-			, targetPosition(CCPointZero)
-			, zoomTarget(0.0f)
-			, offsetDuration(0.0f)
-			, zoomDuration(0.0f)
-			, triggerDelay(0.0f)
-			, pUID(0)
-			, hasCameraOffset(false)
-			, hasTargetPosition(false)
-			, hasZoomTarget(false)
-			, calledByEvent(false)
-			, lockCamera(false)
-			, instantMove(false)
-			, instantZoom(false)
-			, wasInside(false)
-			, firedThisVisit(false)
-			, insideTime(0.0f) {
-		}
-	};
-
 	struct LevelStruct {
 		struct SheetData {
 			std::string texture;
@@ -136,7 +95,7 @@ namespace {
 		std::vector<LevelObject> blocks;
 		std::vector<LevelObject> backgrounds;
 		std::vector<NpcSpawn> npcSpawns;
-		std::vector<CameraTriggerData> cameraTriggers;
+		std::shared_ptr<FLTriggers::TriggerSystem> triggers;
 		FL_CollisionWorld collisionWorld;
 		std::set<SheetData> sheets;
 		CCPoint playerSpawn;
@@ -146,7 +105,8 @@ namespace {
 		float backgroundOffsetY;
 
 		LevelStruct()
-			: playerSpawn(ccp(300.0f, 300.0f))
+			: triggers(new FLTriggers::TriggerSystem())
+			, playerSpawn(ccp(300.0f, 300.0f))
 			, levelSize(CCSizeMake(512.0f, 399.0f))
 			, backgroundOffsetY(0.0f) {
 		}
@@ -183,12 +143,14 @@ namespace {
 		float displayScale;
 		CCSize boundsSize;
 		int contactDamage;
+		int maxHealth;
 
 		EntityDescriptor()
 			: frameDelay(0.1f)
 			, displayScale(1.0f)
 			, boundsSize(CCSizeMake(128.0f, 128.0f))
-			, contactDamage(0) {
+			, contactDamage(0)
+			, maxHealth(1) {
 		}
 	};
 
@@ -198,20 +160,49 @@ namespace {
 		std::vector<CCSprite*> sprites;
 		unsigned int frameIndex;
 		float elapsed;
+		int health;
 		bool active;
 		bool visible;
+		bool defeated;
 
 		EntityRuntime()
 			: root(NULL)
 			, frameIndex(0)
 			, elapsed(0.0f)
+			, health(1)
 			, active(true)
-			, visible(true) {
+			, visible(true)
+			, defeated(false) {
+		}
+	};
+
+	struct ActiveProjectile {
+		CCNode* root;
+		CCPoint position;
+		CCPoint velocity;
+		float lifetimeRemaining;
+		float halfWidth;
+		float halfHeight;
+		bool facingRight;
+		FL_PlayerStanceType stance;
+		bool active;
+
+		ActiveProjectile()
+			: root(NULL)
+			, position(CCPointZero)
+			, velocity(CCPointZero)
+			, lifetimeRemaining(0.0f)
+			, halfWidth(10.0f)
+			, halfHeight(8.0f)
+			, facingRight(true)
+			, stance(FL_PLAYER_STANCE_FROST)
+			, active(false) {
 		}
 	};
 
 	struct RuntimeNode {
 		CCNode* node;
+		std::string groupID;
 		CCRect bounds;
 		bool active;
 		bool visible;
@@ -392,6 +383,7 @@ namespace {
 		if (spriteSheet.empty() || texture.empty() || sheetType.empty()) return false;
 
 		output.id = id;
+		output.groupID = jsonScalarString(json, "groupID");
 		output.objectType = jsonString(json, "type", background ? "background" : "block");
 		FL_Block::Data& data = output.data;
 		data.spriteSheet = spriteSheet;
@@ -421,6 +413,9 @@ namespace {
 		data.flippedX = flipped.x != 0.0f;
 		data.flippedY = flipped.y != 0.0f;
 		data.customAnim = jsonString(json, "customAnim");
+		if (data.customAnim == "0" || data.customAnim == "NULL" || data.customAnim == "null") {
+			data.customAnim.clear();
+		}
 		data.animated = jsonBool(json, "animated", false);
 		data.skipStartAnim = jsonBool(json, "skipStartAnim", false);
 		data.skipEndAnim = jsonBool(json, "skipEndAnim", false);
@@ -449,53 +444,6 @@ namespace {
 				output.collisionPoints.push_back(point->second);
 			}
 		}
-		return true;
-	}
-
-	bool parseCameraTrigger(
-		const std::string& id,
-		const flrapidjson::Value& json,
-		CameraTriggerData& output
-		) {
-		if (!json.IsObject() || toLower(jsonString(json, "Type")) != "cameratrigger") return false;
-
-		output.id = id;
-		output.pUID = jsonInt(json, "p_uID", 0);
-		output.calledByEvent = jsonBool(json, "calledByEvent", false);
-		output.cameraLockType = toLower(jsonScalarString(json, "cameraLockType", "full"));
-		output.lockCamera = jsonBool(json, "lockCamera", false);
-		output.instantMove = jsonBool(json, "instantMove", false);
-		output.instantZoom = jsonBool(json, "instantZoom", false);
-		output.offsetDuration = std::max(0.0f, jsonNumber(json, "offsetDuration", 0.0f));
-		output.zoomDuration = std::max(0.0f, jsonNumber(json, "zoomDuration", 0.0f));
-		output.triggerDelay = std::max(0.0f, jsonNumber(json, "triggerDelay", 0.0f));
-		output.offsetEasingType = jsonScalarString(json, "offsetEasingType", "InOut");
-		output.zoomEasingType = jsonScalarString(json, "zoomEasingType", "InOut");
-
-		output.hasCameraOffset = json.HasMember("cameraOffset") &&
-			json["cameraOffset"].IsArray() && !json["cameraOffset"].Empty();
-		output.cameraOffset = jsonPointFlexible(json, "cameraOffset", CCPointZero);
-
-		output.hasTargetPosition = json.HasMember("targetPosition") &&
-			json["targetPosition"].IsArray() && json["targetPosition"].Size() >= 2;
-		output.targetPosition = jsonPointFlexible(json, "targetPosition", CCPointZero);
-
-		output.hasZoomTarget = json.HasMember("zoomTarget");
-		output.zoomTarget = jsonNumber(json, "zoomTarget", 0.0f);
-
-		const CCPoint position = jsonPoint(json, "position", CCPointZero);
-		const CCPoint scale = jsonPoint(json, "scale", ccp(1.0f, 1.0f));
-
-		// Camera triggers in the editor use a 100x100 logical trigger tile. The
-		// serialized scale stretches this tile into the actual activation region.
-		const float width = 100.0f * std::max(0.01f, std::fabs(scale.x));
-		const float height = 100.0f * std::max(0.01f, std::fabs(scale.y));
-		output.bounds = CCRect(
-			position.x - width * 0.5f,
-			position.y - height * 0.5f,
-			width,
-			height
-			);
 		return true;
 	}
 
@@ -538,33 +486,63 @@ namespace {
 		return true;
 	}
 
+	flrapidjson::Value plistValueToRapidJson(CCObject* object, flrapidjson::Document::AllocatorType& allocator) {
+		flrapidjson::Value result;
+		if (!object) { result.SetNull(); return result; }
+
+		if (CCDictionary* dictionary = dynamic_cast<CCDictionary*>(object)) {
+			result.SetObject();
+			CCDictElement* element = NULL;
+			CCDICT_FOREACH(dictionary, element) {
+				if (!element) continue;
+				const char* keyText = element->getStrKey();
+				if (!keyText) continue;
+				flrapidjson::Value key;
+				key.SetString(keyText, static_cast<flrapidjson::SizeType>(std::strlen(keyText)), allocator);
+				flrapidjson::Value value = plistValueToRapidJson(element->getObject(), allocator);
+				result.AddMember(key, value, allocator);
+			}
+			return result;
+		}
+
+		if (CCArray* array = dynamic_cast<CCArray*>(object)) {
+			result.SetArray();
+			CCObject* item = NULL;
+			CCARRAY_FOREACH(array, item) {
+				flrapidjson::Value value = plistValueToRapidJson(item, allocator);
+				result.PushBack(value, allocator);
+			}
+			return result;
+		}
+
+		CCString* string = dynamic_cast<CCString*>(object);
+		const char* text = string ? string->getCString() : "";
+		if (text && text[0] == '{') {
+			float x = 0.0f, y = 0.0f;
+			if (std::sscanf(text, "{%f, %f}", &x, &y) == 2 ||
+				std::sscanf(text, "{%f,%f}", &x, &y) == 2) {
+				result.SetArray();
+				result.PushBack(x, allocator);
+				result.PushBack(y, allocator);
+				return result;
+			}
+		}
+		result.SetString(text ? text : "", allocator);
+		return result;
+	}
+
 	bool loadLevelData(LevelStruct& level, const std::string& requestedFile) {
-		std::string actualFile = requestedFile;
-		if (endsWithIgnoreCase(actualFile, ".plist")) {
-			actualFile = replaceExtension(actualFile, ".json");
-		}
-
-		std::string jsonText;
-		if (!readJsonFile(actualFile, jsonText)) {
-			CCLog("Could not load level resource %s (requested as %s).", actualFile.c_str(), requestedFile.c_str());
-			return false;
-		}
-
-		const char* text = jsonText.c_str();
-		if (jsonText.size() >= 3 &&
-			static_cast<unsigned char>(text[0]) == 0xEF &&
-			static_cast<unsigned char>(text[1]) == 0xBB &&
-			static_cast<unsigned char>(text[2]) == 0xBF) {
-			text += 3;
-		}
-
 		flrapidjson::Document document;
-		document.Parse<0>(text);
-		if (document.HasParseError() || !document.IsObject()) {
-			CCLog("Error parsing %s: code %d at offset %lu.", actualFile.c_str(),
-				document.GetParseError(), static_cast<unsigned long>(document.GetErrorOffset()));
+		document.SetObject();
+		const std::string fullPath = CCFileUtils::sharedFileUtils()->fullPathForFilename(requestedFile.c_str());
+		CCDictionary* plist = CCDictionary::createWithContentsOfFile(fullPath.c_str());
+		if (!plist || plist->count() == 0) {
+			CCLog("Could not load plist level resource %s.", requestedFile.c_str());
 			return false;
 		}
+		flrapidjson::Value plistRoot = plistValueToRapidJson(plist, document.GetAllocator());
+		document.Swap(plistRoot);
+		const std::string actualFile = requestedFile;
 
 		level.playerSpawn = jsonPoint(document, "playerSpawn", level.playerSpawn);
 		const CCPoint levelSize = jsonPoint(document, "levelSize", ccp(level.levelSize.width, level.levelSize.height));
@@ -633,28 +611,15 @@ namespace {
 		}
 
 		if (document.HasMember("triggerContainer") && document["triggerContainer"].IsObject()) {
-			const flrapidjson::Value& container = document["triggerContainer"];
-			for (flrapidjson::Value::ConstMemberIterator it = container.MemberBegin(); it != container.MemberEnd(); ++it) {
-				CameraTriggerData trigger;
-				if (!parseCameraTrigger(it->name.GetString(), it->value, trigger)) continue;
-				// Event-driven triggers require the original event/group system and
-				// must not activate merely because the player overlaps their editor
-				// marker. Spatial camera triggers are handled directly here.
-				if (!trigger.calledByEvent) level.cameraTriggers.push_back(trigger);
-			}
-			std::sort(level.cameraTriggers.begin(), level.cameraTriggers.end(),
-				[](const CameraTriggerData& left, const CameraTriggerData& right) {
-				if (left.pUID != right.pUID) return left.pUID < right.pUID;
-				return left.id < right.id;
-			});
+			level.triggers->load(document["triggerContainer"]);
 		}
 
-		CCLog("Loaded %s through %s: %u blocks, %u backgrounds, %u NPC spawns, %u camera triggers, %u solid collision shapes, %u one-way surfaces.",
+		CCLog("Loaded %s through %s: %u blocks, %u backgrounds, %u NPC spawns, %u triggers, %u solid collision shapes, %u one-way surfaces.",
 			requestedFile.c_str(), actualFile.c_str(),
 			static_cast<unsigned int>(level.blocks.size()),
 			static_cast<unsigned int>(level.backgrounds.size()),
 			static_cast<unsigned int>(level.npcSpawns.size()),
-			static_cast<unsigned int>(level.cameraTriggers.size()),
+			static_cast<unsigned int>(level.triggers->size()),
 			static_cast<unsigned int>(level.collisionWorld.solidShapeCount()),
 			static_cast<unsigned int>(level.collisionWorld.oneWaySegmentCount()));
 		return true;
@@ -837,6 +802,13 @@ namespace {
 				dictionaryFloat(definition, "damage", 0.0f)
 			)
 		));
+		descriptor->maxHealth = std::max(1, static_cast<int>(
+			dictionaryFloat(
+				definition,
+				"health",
+				dictionaryFloat(definition, "hitPoints", 1.0f)
+			)
+		));
 
 		if (!loadAtlas(descriptor->sheetName, loadedAtlases)) return std::shared_ptr<EntityDescriptor>();
 
@@ -955,6 +927,19 @@ namespace {
 			left.getMaxY() >= right.getMinY() && left.getMinY() <= right.getMaxY();
 	}
 
+	CCRect entityBounds(const EntityRuntime& entity) {
+		if (!entity.root || !entity.descriptor) return CCRect(0.0f, 0.0f, 0.0f, 0.0f);
+		const CCPoint position = entity.root->getPosition();
+		const float width = entity.descriptor->boundsSize.width * std::fabs(entity.root->getScaleX());
+		const float height = entity.descriptor->boundsSize.height * std::fabs(entity.root->getScaleY());
+		return CCRect(
+			position.x - width * 0.5f,
+			position.y - height * 0.5f,
+			width,
+			height
+		);
+	}
+
 	CCRect expandedRect(const CCRect& rect, float amount) {
 		return CCRect(
 			rect.origin.x - amount,
@@ -1036,18 +1021,22 @@ namespace {
 		return result;
 	}
 
+	float rollDoubleTapWindow() { return 0.36f; }
+
 	void readGameplayKeys(bool& left, bool& right, bool& jump) {
 #if (CC_TARGET_PLATFORM == CC_PLATFORM_WIN32)
-		left = (GetAsyncKeyState(VK_LEFT) & 0x8000) != 0;
-		right = (GetAsyncKeyState(VK_RIGHT) & 0x8000) != 0;
+		left = ((GetAsyncKeyState(VK_LEFT) & 0x8000) != 0) || ((GetAsyncKeyState('A') & 0x8000) != 0);
+		right = ((GetAsyncKeyState(VK_RIGHT) & 0x8000) != 0) || ((GetAsyncKeyState('D') & 0x8000) != 0);
 		jump = (GetAsyncKeyState(VK_SPACE) & 0x8000) != 0;
 #elif (CC_TARGET_PLATFORM == CC_PLATFORM_LINUX)
-		left = glfwGetKey(GLFW_KEY_LEFT) == GLFW_PRESS;
-		right = glfwGetKey(GLFW_KEY_RIGHT) == GLFW_PRESS;
+		left = glfwGetKey(GLFW_KEY_LEFT) == GLFW_PRESS || glfwGetKey(GLFW_KEY_A) == GLFW_PRESS;
+		right = glfwGetKey(GLFW_KEY_RIGHT) == GLFW_PRESS || glfwGetKey(GLFW_KEY_D) == GLFW_PRESS;
 		jump = glfwGetKey(GLFW_KEY_SPACE) == GLFW_PRESS;
 #elif (CC_TARGET_PLATFORM == CC_PLATFORM_MAC)
-		left = CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, 123);
-		right = CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, 124);
+		left = CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, 123) ||
+			CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, 0);
+		right = CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, 124) ||
+			CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, 2);
 		jump = CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, 49);
 #else
 		left = right = jump = false;
@@ -1057,6 +1046,20 @@ namespace {
 } // namespace
 
 struct FL_PlayLayer::Members {
+	struct CameraMoveState {
+		std::vector<CCPoint> points;
+		std::vector<float> durations;
+		std::vector<float> delays;
+		std::vector<std::string> easing;
+		CCPoint segmentStart;
+		size_t index;
+		float elapsed;
+		bool active;
+		bool waiting;
+		bool dontReturn;
+		CCPoint savedOffset;
+		CameraMoveState() : segmentStart(CCPointZero), index(0), elapsed(0), active(false), waiting(true), dontReturn(false), savedOffset(CCPointZero) {}
+	};
 	FL_PlayLayer::Args sceneArgs;
 	CCPoint cameraPos;
 	CCPoint spawnPos;
@@ -1081,17 +1084,25 @@ struct FL_PlayLayer::Members {
 
 	bool cameraLocked;
 	CCPoint cameraLockPosition;
+	CCPoint cameraLockStart;
+	CCPoint cameraLockTarget;
+	float cameraLockElapsed;
+	float cameraLockDuration;
+	std::string cameraLockEasing;
 	bool snapCameraPosition;
-	std::vector<CameraTriggerData> cameraTriggers;
-	std::string activeCameraTriggerId;
-	float activeCameraTriggerTime;
-	bool activeCameraTriggerFired;
+	CameraMoveState cameraMove;
+	std::shared_ptr<FLTriggers::TriggerSystem> triggers;
 
 	bool up;
 	bool down;
 	bool left;
 	bool right;
 	bool jumpInputWasDown;
+	bool keyboardLeftWasDown;
+	bool keyboardRightWasDown;
+	float inputTime;
+	float lastDirectionalTapTime;
+	int lastDirectionalTap;
 	bool pausedByUI;
 	bool soundEnabled;
 	FL_Player* player;
@@ -1106,6 +1117,8 @@ struct FL_PlayLayer::Members {
 	std::set<std::string> loadedAtlases;
 	std::vector<RuntimeNode> runtimeNodes;
 	std::vector<EntityRuntime> entities;
+	std::vector<ActiveProjectile> activeProjectiles;
+	FL_CollisionWorld collisionWorld;
 	std::map<std::string, std::shared_ptr<EntityDescriptor> > entityDescriptors;
 
 	Members()
@@ -1127,14 +1140,21 @@ struct FL_PlayLayer::Members {
 		, zoomDuration(0.0f)
 		, cameraLocked(false)
 		, cameraLockPosition(CCPointZero)
+		, cameraLockStart(CCPointZero)
+		, cameraLockTarget(CCPointZero)
+		, cameraLockElapsed(0.0f)
+		, cameraLockDuration(0.0f)
 		, snapCameraPosition(false)
-		, activeCameraTriggerTime(0.0f)
-		, activeCameraTriggerFired(false)
 		, up(false)
 		, down(false)
 		, left(false)
 		, right(false)
 		, jumpInputWasDown(false)
+		, keyboardLeftWasDown(false)
+		, keyboardRightWasDown(false)
+		, inputTime(0.0f)
+		, lastDirectionalTapTime(-10.0f)
+		, lastDirectionalTap(0)
 		, pausedByUI(false)
 		, soundEnabled(true)
 		, player(NULL)
@@ -1163,56 +1183,40 @@ struct FL_PlayLayer::Members {
 		if (zoomDuration <= 0.0f) zoom = zoomTarget;
 	}
 
-	void applyCameraTrigger(const CameraTriggerData& trigger, const CCPoint& playerPosition) {
-		const bool resetCamera = trigger.cameraLockType.empty() ||
-			trigger.cameraLockType == "0" || trigger.cameraLockType == "none";
-
-		CCPoint requestedOffset = defaultCameraOffset;
-		float requestedZoom = defaultZoom;
-		bool requestedLock = false;
-		CCPoint requestedLockPosition = playerPosition;
-
-		if (!resetCamera) {
-			requestedOffset = trigger.hasCameraOffset ? trigger.cameraOffset : defaultCameraOffset;
-			requestedZoom = trigger.hasZoomTarget
-				? cameraZoomFromLevelValue(defaultZoom, trigger.zoomTarget)
-				: zoomTarget;
-			requestedLock = trigger.lockCamera;
-			requestedLockPosition = trigger.hasTargetPosition
-				? trigger.targetPosition
-				: playerPosition;
-		}
-
-		const float moveDuration = trigger.instantMove
-			? 0.0f
-			: (trigger.offsetDuration > 0.0f ? trigger.offsetDuration : 0.28f);
-		const float targetZoomDuration = trigger.instantZoom
-			? 0.0f
-			: (trigger.zoomDuration > 0.0f ? trigger.zoomDuration : 0.34f);
-
-		beginOffsetTransition(requestedOffset, moveDuration, trigger.offsetEasingType);
-		beginZoomTransition(requestedZoom, targetZoomDuration, trigger.zoomEasingType);
-		cameraLocked = requestedLock;
-		cameraLockPosition = requestedLockPosition;
-
-		if (trigger.instantMove) {
-			cameraOffset = cameraOffsetTarget;
-			cameraPos = cameraCenterWithScreenOffset(
-				cameraLocked ? cameraLockPosition : playerPosition,
-				cameraOffset,
-				zoom
-				);
-			snapCameraPosition = true;
-		}
-
-		CCLog(
-			"Camera trigger %s: offset=(%.1f, %.1f), zoom=%.3f, lock=%d.",
-			trigger.id.c_str(), requestedOffset.x, requestedOffset.y,
-			requestedZoom, requestedLock ? 1 : 0
-			);
-	}
-
 	void updateCameraTransitions(float dt) {
+		if (cameraMove.active && cameraMove.index < cameraMove.points.size()) {
+			const size_t i = cameraMove.index;
+			cameraMove.elapsed += std::max(0.0f, dt);
+			const float delay = i < cameraMove.delays.size() ? std::max(0.0f, cameraMove.delays[i]) : 0.0f;
+			if (cameraMove.waiting) {
+				if (cameraMove.elapsed >= delay) {
+					cameraMove.elapsed -= delay;
+					cameraMove.waiting = false;
+					cameraMove.segmentStart = cameraLockPosition;
+				}
+			}
+			if (!cameraMove.waiting) {
+				const float duration = i < cameraMove.durations.size() ? std::max(0.0f, cameraMove.durations[i]) : 0.0f;
+				const std::string ease = i < cameraMove.easing.size() ? cameraMove.easing[i] : "InOut";
+				const float progress = duration <= 0.0f ? 1.0f : cameraEaseProgress(cameraMove.elapsed / duration, ease);
+				cameraLockPosition = ccpAdd(cameraMove.segmentStart,
+					ccpMult(ccpSub(cameraMove.points[i], cameraMove.segmentStart), progress));
+				if (duration <= 0.0f || cameraMove.elapsed >= duration) {
+					cameraLockPosition = cameraMove.points[i];
+					++cameraMove.index;
+					cameraMove.elapsed = 0.0f;
+					cameraMove.waiting = true;
+					if (cameraMove.index >= cameraMove.points.size()) {
+						cameraMove.active = false;
+						if (!cameraMove.dontReturn) {
+							cameraLocked = false;
+							cameraOffset = cameraMove.savedOffset;
+							cameraOffsetTarget = cameraMove.savedOffset;
+						}
+					}
+				}
+			}
+		}
 		if (cameraOffsetDuration > 0.0f) {
 			cameraOffsetElapsed += std::max(0.0f, dt);
 			const float progress = cameraEaseProgress(
@@ -1226,6 +1230,19 @@ struct FL_PlayLayer::Members {
 			if (cameraOffsetElapsed >= cameraOffsetDuration) {
 				cameraOffset = cameraOffsetTarget;
 				cameraOffsetDuration = 0.0f;
+			}
+		}
+
+		if (cameraLockDuration > 0.0f) {
+			cameraLockElapsed += std::max(0.0f, dt);
+			const float progress = cameraEaseProgress(
+				cameraLockElapsed / cameraLockDuration,
+				cameraLockEasing);
+			cameraLockPosition = ccpAdd(cameraLockStart,
+				ccpMult(ccpSub(cameraLockTarget, cameraLockStart), progress));
+			if (cameraLockElapsed >= cameraLockDuration) {
+				cameraLockPosition = cameraLockTarget;
+				cameraLockDuration = 0.0f;
 			}
 		}
 
@@ -1351,7 +1368,7 @@ bool FL_PlayLayer::init(const Args& args) {
 	m->lastTouchPos = m->cameraPos;
 	m->levelSize = level.levelSize;
 	m->backgroundOffsetY = level.backgroundOffsetY;
-	m->cameraTriggers = level.cameraTriggers;
+	m->triggers = level.triggers;
 
 	for (std::set<LevelStruct::SheetData>::const_iterator it = level.sheets.begin(); it != level.sheets.end(); ++it) {
 		loadAtlas(it->texture, m->loadedAtlases);
@@ -1409,6 +1426,7 @@ bool FL_PlayLayer::init(const Args& args) {
 
 			RuntimeNode runtime;
 			runtime.node = block;
+			runtime.groupID = object.groupID;
 			// Sprite frames in one animation may have different trim offsets and
 			// dimensions. The culling rectangle therefore follows the current
 			// transformed sprite bounds instead of being frozen on frame zero.
@@ -1437,7 +1455,8 @@ bool FL_PlayLayer::init(const Args& args) {
 			}
 		}
 
-		m->player = FL_Player::create(level.playerSpawn, level.levelSize, level.collisionWorld);
+		m->collisionWorld = level.collisionWorld;
+		m->player = FL_Player::create(level.playerSpawn, level.levelSize, m->collisionWorld);
 		if (!m->player) {
 			// A missing player resource must not invalidate the whole level scene.
 			// Keep the camera at playerSpawn and leave a diagnostic in the console.
@@ -1469,6 +1488,7 @@ bool FL_PlayLayer::init(const Args& args) {
 		EntityRuntime entity;
 		entity.root = CCNode::create();
 		entity.descriptor = descriptor;
+		entity.health = descriptor->maxHealth;
 		entity.root->setPosition(spawn->position);
 		entity.root->setScaleX(spawn->scale.x * (spawn->flippedX ? -1.0f : 1.0f));
 		entity.root->setScaleY(spawn->scale.y * (spawn->flippedY ? -1.0f : 1.0f));
@@ -1512,6 +1532,156 @@ bool FL_PlayLayer::init(const Args& args) {
 	return true;
 }
 
+void FL_PlayLayer::triggerCamera(const CCPoint& offset, bool hasOffset, float levelZoom,
+	bool hasZoom, bool lockCamera, const CCPoint& lockPosition, bool hasLockPosition,
+	bool resetCamera, float moveDuration, float targetZoomDuration,
+	const std::string& moveEasing, const std::string& targetZoomEasing,
+	bool instantMove, bool instantZoom) {
+	const CCPoint playerPosition = m->player ? m->player->getPosition() : m->spawnPos;
+	const CCPoint requestedOffset = resetCamera ? m->defaultCameraOffset : (hasOffset ? offset : m->defaultCameraOffset);
+	const float requestedZoom = resetCamera ? m->defaultZoom : (hasZoom ? cameraZoomFromLevelValue(m->defaultZoom, levelZoom) : m->zoomTarget);
+	// `instantMove/instantZoom` are the explicit instant switches. A zero authored
+	// duration with those switches disabled uses the game's normal camera blend.
+	const float effectiveMoveDuration = instantMove ? 0.0f : (moveDuration > 0.0f ? moveDuration : 0.35f);
+	const float effectiveZoomDuration = instantZoom ? 0.0f : (targetZoomDuration > 0.0f ? targetZoomDuration : 0.35f);
+	m->beginOffsetTransition(requestedOffset, effectiveMoveDuration, moveEasing);
+	m->beginZoomTransition(requestedZoom, effectiveZoomDuration, targetZoomEasing);
+	const bool requestedLock = !resetCamera && lockCamera;
+	if (requestedLock) {
+		// Convert the current rendered camera center back to a base position. This
+		// makes the first interpolation frame identical to the frame before entry.
+		const float safeZoom = std::max(0.01f, m->zoom);
+		m->cameraLockStart = ccp(
+			m->cameraPos.x - m->cameraOffset.x / safeZoom,
+			m->cameraPos.y - m->cameraOffset.y / safeZoom);
+		m->cameraLockTarget = hasLockPosition ? lockPosition : playerPosition;
+		m->cameraLockPosition = m->cameraLockStart;
+		m->cameraLockElapsed = 0.0f;
+		m->cameraLockDuration = effectiveMoveDuration;
+		m->cameraLockEasing = moveEasing;
+		if (m->cameraLockDuration <= 0.0f) m->cameraLockPosition = m->cameraLockTarget;
+	}
+	else {
+		m->cameraLockDuration = 0.0f;
+		m->cameraLockPosition = playerPosition;
+	}
+	m->cameraLocked = requestedLock;
+	if (instantMove) {
+		m->cameraOffset = m->cameraOffsetTarget;
+		m->cameraPos = cameraCenterWithScreenOffset(m->cameraLocked ? m->cameraLockPosition : playerPosition, m->cameraOffset, m->zoom);
+		m->snapCameraPosition = true;
+	}
+}
+
+void FL_PlayLayer::triggerCameraMove(const std::vector<CCPoint>& points,
+	const std::vector<float>& durations, const std::vector<float>& delays,
+	const std::vector<std::string>& easing, bool dontReturnToPlayer) {
+	if (points.empty()) return;
+	m->cameraMove.points = points;
+	m->cameraMove.durations = durations;
+	m->cameraMove.delays = delays;
+	m->cameraMove.easing = easing;
+	m->cameraMove.index = 0;
+	m->cameraMove.elapsed = 0.0f;
+	m->cameraMove.waiting = true;
+	m->cameraMove.active = true;
+	m->cameraMove.dontReturn = dontReturnToPlayer;
+	m->cameraMove.segmentStart = m->cameraPos;
+	m->cameraMove.savedOffset = m->cameraOffset;
+	m->cameraLocked = true;
+	m->cameraLockPosition = m->cameraPos;
+	m->cameraLockDuration = 0.0f;
+	m->cameraOffset = CCPointZero;
+	m->cameraOffsetTarget = CCPointZero;
+}
+
+void FL_PlayLayer::triggerTeleport(const CCPoint& target, bool) {
+	if (m->player) m->player->setPosition(target);
+	m->cameraPos = target;
+	m->snapCameraPosition = true;
+}
+
+void FL_PlayLayer::triggerShake(float duration, const CCPoint& strength) {
+	CCLog("TriggerEventShake duration=%.2f strength=(%.1f, %.1f)", duration, strength.x, strength.y);
+	CCActionInterval* shake = CCSequence::create(
+		CCMoveBy::create(duration * .25f, ccp(strength.x, strength.y)),
+		CCMoveBy::create(duration * .25f, ccp(-strength.x * 2, -strength.y * 2)),
+		CCMoveBy::create(duration * .25f, ccp(strength.x * 2, strength.y * 2)),
+		CCMoveBy::create(duration * .25f, ccp(-strength.x, -strength.y)), NULL);
+	if (shake) runAction(shake);
+}
+
+void FL_PlayLayer::triggerExitLevel(bool) {
+	CCDirector::sharedDirector()->replaceScene(CCTransitionFade::create(.35f, FL_LevelScene::scene()));
+}
+
+void FL_PlayLayer::triggerPlaySound(const std::string& sound) {
+	if (!sound.empty() && m->soundEnabled) SimpleAudioEngine::sharedEngine()->playEffect(sound.c_str());
+}
+
+void FL_PlayLayer::triggerReleaseCamera() {
+	// Leaving a spatial lock zone returns the camera base to the player while
+	// preserving the zone's authored zoom and offset until another zone changes it.
+	m->cameraLocked = false;
+	m->cameraLockDuration = 0.0f;
+	m->cameraMove.active = false;
+	m->snapCameraPosition = false;
+}
+
+void FL_PlayLayer::triggerCommand(const std::string& type, const std::string& value,
+	const std::string&, const CCPoint&, float amount, bool enabled, bool alternate) {
+	if (type == "triggereventsafespot") {
+		if (m->player) m->player->setCheckpoint(m->player->getPosition());
+	}
+	else if (type == "triggereventfalldeath") {
+		if (m->player) {
+			// Health is stored in quarter-hearts: one full heart is 4 HP.
+			// A fall costs 2/4 of a heart, then returns to the last safe spot.
+			m->player->takeDamage(2);
+			m->player->respawn();
+		}
+	}
+	else if (type == "spawntrigger") {
+		for (std::vector<RuntimeNode>::iterator it = m->runtimeNodes.begin(); it != m->runtimeNodes.end(); ++it) {
+			if (it->groupID != value) continue;
+			it->active = true; it->visible = true;
+			if (it->node) it->node->setVisible(true);
+		}
+	}
+	else if (type == "triggermovabledespawner") {
+		// Despawners affect movable objects currently touching their region; those
+		// objects are represented by runtime nodes and become inactive when culled.
+	}
+	else if (type == "triggereventsound") {
+		if (alternate && enabled && value != "0" && !value.empty())
+			SimpleAudioEngine::sharedEngine()->playBackgroundMusic(value.c_str(), true);
+		else if (alternate && !enabled) SimpleAudioEngine::sharedEngine()->stopBackgroundMusic();
+		else if (value != "0" && !value.empty() && enabled) triggerPlaySound(value);
+	}
+	else if (type == "triggereventtoggleshadow") {
+		if (m->fixedBackground) m->fixedBackground->setOpacity(
+			enabled ? static_cast<GLubyte>(std::max(0.f, std::min(255.f, amount))) : 255);
+	}
+	else if (type == "triggereventtogglebg") {
+		if (m->fixedBackground) m->fixedBackground->setVisible(enabled);
+	}
+	else if (type == "triggereventcameralimit") {
+		// Camera limits are represented by a locked camera until a reset event.
+		m->cameraLocked = enabled;
+		if (enabled && m->player) m->cameraLockPosition = m->player->getPosition();
+	}
+	else if (type == "triggereventstopcameramove") {
+		if (!alternate) m->cameraLocked = false;
+	}
+	else if (type == "triggereventweather" || type == "triggereventlightning") {
+		CCLog("%s %s: %s", type.c_str(), value.c_str(), enabled ? "ON" : "OFF");
+	}
+	else if (type == "tetutorialpopup" || type == "triggertutorial" ||
+		type == "triggerdialog" || type == "triggershop" || type == "triggeraicommand") {
+		CCLog("Trigger command %s: %s", type.c_str(), value.c_str());
+	}
+}
+
 void FL_PlayLayer::registerWithTouchDispatcher() {
 	CCDirector::sharedDirector()->getTouchDispatcher()->addStandardDelegate(this, 0);
 }
@@ -1541,6 +1711,50 @@ void FL_PlayLayer::attachFixedBackground(CCNode* parent, int zOrder) {
 	m->fixedBackground->setScale(cover);
 }
 
+void FL_PlayLayer::spawnAttackProjectile(
+	const CCPoint& playerPosition,
+	bool facingRight,
+	bool airborne,
+	FL_PlayerStanceType stance
+	) {
+	if (!m || m->previewMode) return;
+
+	const float lifetime = FL_PlayerParticles::projectileDuration();
+	const float travelDistance = FL_PlayerParticles::projectileTravelDistance();
+	const CCPoint start = ccpAdd(
+		playerPosition,
+		FL_PlayerParticles_forwardOffset(
+			facingRight,
+			FL_PlayerParticles::projectileStartOffset(),
+			airborne ? 4.0f : -3.0f
+			)
+		);
+
+	CCNode* root = FL_PlayerParticles::createAttackProjectileVisual(
+		this,
+		start,
+		facingRight,
+		stance,
+		lifetime
+		);
+	if (!root) return;
+
+	ActiveProjectile projectile;
+	projectile.root = root;
+	projectile.position = start;
+	projectile.velocity = ccp(
+		(facingRight ? 1.0f : -1.0f) * (travelDistance / std::max(0.001f, lifetime)),
+		0.0f
+		);
+	projectile.lifetimeRemaining = lifetime;
+	projectile.halfWidth = 10.0f;
+	projectile.halfHeight = 8.0f;
+	projectile.facingRight = facingRight;
+	projectile.stance = stance;
+	projectile.active = true;
+	m->activeProjectiles.push_back(projectile);
+}
+
 void FL_PlayLayer::onEnter() {
 	CCLayer::onEnter();
 	// Register only after the node belongs to a running scene. This keeps the
@@ -1556,11 +1770,32 @@ void FL_PlayLayer::onExit() {
 }
 
 void FL_PlayLayer::update(float dt) {
+	const float safeDt = std::max(0.0f, std::min(dt, 0.1f));
+	m->inputTime += safeDt;
+
 	if (!m->previewMode && m->player) {
 		bool keyboardLeft = false;
 		bool keyboardRight = false;
 		bool keyboardJump = false;
 		readGameplayKeys(keyboardLeft, keyboardRight, keyboardJump);
+		if (keyboardLeft && !m->keyboardLeftWasDown) {
+			if (m->lastDirectionalTap == -1 &&
+				m->inputTime - m->lastDirectionalTapTime <= rollDoubleTapWindow()) {
+				m->player->requestRoll(-1);
+			}
+			m->lastDirectionalTap = -1;
+			m->lastDirectionalTapTime = m->inputTime;
+		}
+		if (keyboardRight && !m->keyboardRightWasDown) {
+			if (m->lastDirectionalTap == 1 &&
+				m->inputTime - m->lastDirectionalTapTime <= rollDoubleTapWindow()) {
+				m->player->requestRoll(1);
+			}
+			m->lastDirectionalTap = 1;
+			m->lastDirectionalTapTime = m->inputTime;
+		}
+		m->keyboardLeftWasDown = keyboardLeft;
+		m->keyboardRightWasDown = keyboardRight;
 
 		float moveInput = 0.0f;
 		if (m->left || keyboardLeft) moveInput -= 1.0f;
@@ -1572,27 +1807,146 @@ void FL_PlayLayer::update(float dt) {
 		m->jumpInputWasDown = jumpInputDown;
 		m->player->step(dt);
 
+		CCRect attackBounds;
+		if (m->player->consumeAttackStrike(attackBounds)) {
+			const int damage = std::max(1, m->player->getAttackDamage());
+			for (std::vector<EntityRuntime>::iterator entity = m->entities.begin();
+				entity != m->entities.end(); ++entity) {
+				if (entity->defeated || !entity->active || !entity->visible ||
+					!entity->root || !entity->descriptor) {
+					continue;
+				}
+				const CCRect bounds = entityBounds(*entity);
+				if (!rectsIntersect(attackBounds, bounds)) continue;
+
+				entity->health -= damage;
+				FL_PlayerParticles::spawnAttackImpact(
+					this,
+					entity->root->getPosition(),
+					m->player->getAttackFacingRight(),
+					m->player->getAttackStance()
+				);
+				FL_ProjectileBreakParticles::spawnProjectileBreak(
+					this,
+					entity->root->getPosition(),
+					m->player->getAttackFacingRight(),
+					m->player->getAttackStance(),
+					0.0f
+				);
+
+				// The visible projectile must disappear when the attack connects.
+				// Otherwise it keeps flying and may produce a second delayed break.
+				for (std::vector<ActiveProjectile>::iterator projectile = m->activeProjectiles.begin();
+					projectile != m->activeProjectiles.end(); ++projectile) {
+					if (!projectile->active) continue;
+					if (projectile->facingRight != m->player->getAttackFacingRight()) continue;
+					if (projectile->stance != m->player->getAttackStance()) continue;
+					projectile->active = false;
+					if (projectile->root) projectile->root->removeFromParentAndCleanup(true);
+				}
+
+				if (entity->health <= 0) {
+					entity->defeated = true;
+					entity->active = false;
+					entity->visible = false;
+					entity->root->stopAllActions();
+					entity->root->setVisible(false);
+
+					const int entityIndex = static_cast<int>(entity - m->entities.begin());
+					for (std::vector<RuntimeNode>::iterator runtime = m->runtimeNodes.begin();
+						runtime != m->runtimeNodes.end(); ++runtime) {
+						if (runtime->entityIndex == entityIndex) {
+							runtime->active = false;
+							runtime->visible = false;
+							runtime->warmupFrames = 0;
+						}
+					}
+				}
+			}
+		}
+
+		// Update active attack projectiles against the same static collision world
+		// used by FL_Player::step().  The motion is sub-stepped so thin walls and
+		// sloped collision polygons cannot be skipped by a fast projectile.
+		for (std::vector<ActiveProjectile>::iterator projectile = m->activeProjectiles.begin();
+			projectile != m->activeProjectiles.end(); ++projectile) {
+			if (!projectile->active) continue;
+
+			float remainingDt = safeDt;
+			bool hitWorld = false;
+			while (remainingDt > 0.0001f && projectile->active && !hitWorld) {
+				const float speed = std::max(std::fabs(projectile->velocity.x), std::fabs(projectile->velocity.y));
+				const float maximumStep = 6.0f;
+				const float stepDt = speed > 0.001f
+					? std::min(remainingDt, maximumStep / speed)
+					: remainingDt;
+
+				const CCPoint oldPosition = projectile->position;
+				CCPoint requestedPosition = ccp(
+					oldPosition.x + projectile->velocity.x * stepDt,
+					oldPosition.y + projectile->velocity.y * stepDt
+					);
+				CCPoint resolvedPosition = requestedPosition;
+				CCPoint collisionVelocity = projectile->velocity;
+				FL_CollisionWorld::MoveResult projectileCollision;
+
+				const bool adjustedByCollision = m->collisionWorld.moveAabb(
+					oldPosition,
+					resolvedPosition,
+					collisionVelocity,
+					projectile->halfWidth,
+					projectile->halfHeight,
+					projectileCollision
+					);
+
+				hitWorld = adjustedByCollision &&
+					(projectileCollision.hitWall || projectileCollision.hitCeiling || projectileCollision.grounded ||
+					 std::fabs(resolvedPosition.x - requestedPosition.x) > 0.25f ||
+					 std::fabs(resolvedPosition.y - requestedPosition.y) > 0.25f);
+
+				if (m->levelSize.width > 0.0f &&
+					(resolvedPosition.x < projectile->halfWidth ||
+					 resolvedPosition.x > m->levelSize.width - projectile->halfWidth)) {
+					hitWorld = true;
+				}
+				if (resolvedPosition.y < -64.0f || resolvedPosition.y > m->levelSize.height + 256.0f) {
+					hitWorld = true;
+				}
+
+				projectile->position = resolvedPosition;
+				if (projectile->root) projectile->root->setPosition(projectile->position);
+
+				projectile->lifetimeRemaining -= stepDt;
+				if (projectile->lifetimeRemaining <= 0.0f) hitWorld = true;
+
+				remainingDt -= stepDt;
+			}
+
+			if (hitWorld) {
+				projectile->active = false;
+				FL_ProjectileBreakParticles::spawnProjectileBreak(
+					this,
+					projectile->position,
+					projectile->facingRight,
+					projectile->stance,
+					0.0f
+				);
+				if (projectile->root) projectile->root->removeFromParentAndCleanup(true);
+			}
+		}
+
 		CCPoint playerPosition = m->player->getPosition();
 		const CCRect playerBounds = m->player->getCollisionBounds();
 		for (std::vector<EntityRuntime>::iterator entity = m->entities.begin();
 			entity != m->entities.end(); ++entity) {
-			if (!entity->active || !entity->visible || !entity->root ||
+			if (entity->defeated || !entity->active || !entity->visible || !entity->root ||
 				!entity->descriptor || entity->descriptor->contactDamage <= 0) {
 				continue;
 			}
 
 			const CCPoint entityPosition = entity->root->getPosition();
-			const float width = entity->descriptor->boundsSize.width *
-				std::fabs(entity->root->getScaleX());
-			const float height = entity->descriptor->boundsSize.height *
-				std::fabs(entity->root->getScaleY());
-			const CCRect entityBounds(
-				entityPosition.x - width * 0.5f,
-				entityPosition.y - height * 0.5f,
-				width,
-				height
-			);
-			if (!rectsIntersect(playerBounds, entityBounds)) continue;
+			const CCRect bounds = entityBounds(*entity);
+			if (!rectsIntersect(playerBounds, bounds)) continue;
 
 			if (m->player->takeDamage(
 				entity->descriptor->contactDamage,
@@ -1605,39 +1959,9 @@ void FL_PlayLayer::update(float dt) {
 			break;
 		}
 
-		// A spatial trigger is selected by the player's center point. Testing the
-		// whole body made adjacent/overlapping camera zones fire too early and, in
-		// the same frame, overwrite each other. Higher p_uID keeps the original
-		// editor ordering when two regions genuinely contain the same point.
-		CameraTriggerData* selectedTrigger = NULL;
-		for (std::vector<CameraTriggerData>::iterator trigger = m->cameraTriggers.begin();
-			trigger != m->cameraTriggers.end(); ++trigger) {
-			if (!pointInsideRect(trigger->bounds, playerPosition)) continue;
-			if (!selectedTrigger || trigger->pUID > selectedTrigger->pUID) {
-				selectedTrigger = &(*trigger);
-			}
-		}
+		if (m->triggers) m->triggers->update(safeDt, playerPosition, *this);
 
-		if (!selectedTrigger) {
-			m->activeCameraTriggerId.clear();
-			m->activeCameraTriggerTime = 0.0f;
-			m->activeCameraTriggerFired = false;
-		}
-		else {
-			if (m->activeCameraTriggerId != selectedTrigger->id) {
-				m->activeCameraTriggerId = selectedTrigger->id;
-				m->activeCameraTriggerTime = 0.0f;
-				m->activeCameraTriggerFired = false;
-			}
-
-			m->activeCameraTriggerTime += std::max(0.0f, dt);
-			if (!m->activeCameraTriggerFired &&
-				m->activeCameraTriggerTime + 0.0001f >= selectedTrigger->triggerDelay) {
-				m->applyCameraTrigger(*selectedTrigger, playerPosition);
-				m->activeCameraTriggerFired = true;
-			}
-		}
-
+		const bool scriptedCameraFrame = m->cameraMove.active;
 		m->updateCameraTransitions(dt);
 
 		const CCPoint cameraBase = m->cameraLocked
@@ -1648,7 +1972,12 @@ void FL_PlayLayer::update(float dt) {
 			m->cameraOffset,
 			m->zoom
 			);
-		if (m->snapCameraPosition) {
+		// Spatial camera zones still follow the player while their offset/zoom is
+		// blending. Snapping to `target` here erased the normal follow lag on every
+		// zone boundary and looked like a teleport. Only an authored absolute
+		// camera path or lock owns cameraPos directly.
+		const bool authoredTransition = scriptedCameraFrame || m->cameraLocked;
+		if (m->snapCameraPosition || authoredTransition) {
 			m->cameraPos = target;
 			m->snapCameraPosition = false;
 		}
@@ -1712,6 +2041,15 @@ void FL_PlayLayer::update(float dt) {
 	const CCRect activationViewport = expandedRect(viewport, activationPadding);
 
 	for (std::vector<RuntimeNode>::iterator runtime = m->runtimeNodes.begin(); runtime != m->runtimeNodes.end(); ++runtime) {
+		if (runtime->entityIndex >= 0 && runtime->entityIndex < static_cast<int>(m->entities.size()) &&
+			m->entities[runtime->entityIndex].defeated) {
+			runtime->active = false;
+			runtime->visible = false;
+			runtime->warmupFrames = 0;
+			if (runtime->node) runtime->node->setVisible(false);
+			continue;
+		}
+
 		if (runtime->trackNodeBounds && runtime->node) {
 			const CCRect currentBounds = runtime->node->boundingBox();
 			if (currentBounds.size.width > 0.0f && currentBounds.size.height > 0.0f) {
@@ -1755,7 +2093,7 @@ void FL_PlayLayer::update(float dt) {
 	}
 
 	for (std::vector<EntityRuntime>::iterator entity = m->entities.begin(); entity != m->entities.end(); ++entity) {
-		if (!entity->active || !entity->descriptor || entity->descriptor->frames.size() <= 1) continue;
+		if (entity->defeated || !entity->active || !entity->descriptor || entity->descriptor->frames.size() <= 1) continue;
 		entity->elapsed += dt;
 		while (entity->elapsed >= entity->descriptor->frameDelay) {
 			entity->elapsed -= entity->descriptor->frameDelay;
@@ -1771,9 +2109,25 @@ void FL_PlayLayer::uiDownPressed() {
 	if (m->player) m->player->requestAttack();
 }
 void FL_PlayLayer::uiDownReleased() { m->down = false; }
-void FL_PlayLayer::uiLeftPressed() { m->left = true; }
+void FL_PlayLayer::uiLeftPressed() {
+	if (m->lastDirectionalTap == -1 &&
+		m->inputTime - m->lastDirectionalTapTime <= rollDoubleTapWindow() && m->player) {
+		m->player->requestRoll(-1);
+	}
+	m->lastDirectionalTap = -1;
+	m->lastDirectionalTapTime = m->inputTime;
+	m->left = true;
+}
 void FL_PlayLayer::uiLeftReleased() { m->left = false; }
-void FL_PlayLayer::uiRightPressed() { m->right = true; }
+void FL_PlayLayer::uiRightPressed() {
+	if (m->lastDirectionalTap == 1 &&
+		m->inputTime - m->lastDirectionalTapTime <= rollDoubleTapWindow() && m->player) {
+		m->player->requestRoll(1);
+	}
+	m->lastDirectionalTap = 1;
+	m->lastDirectionalTapTime = m->inputTime;
+	m->right = true;
+}
 void FL_PlayLayer::uiRightReleased() { m->right = false; }
 
 void FL_PlayLayer::uiMenuPressed() {
@@ -1783,6 +2137,8 @@ void FL_PlayLayer::uiMenuPressed() {
 	m->left = false;
 	m->right = false;
 	m->jumpInputWasDown = false;
+	m->keyboardLeftWasDown = false;
+	m->keyboardRightWasDown = false;
 	if (m->player) m->player->setMoveInput(0.0f);
 
 	if (m->pausedByUI) {
@@ -1801,6 +2157,11 @@ void FL_PlayLayer::uiMenuPressed() {
 			if (runtime->node && runtime->active) runtime->node->resumeSchedulerAndActions();
 		}
 	}
+}
+
+void FL_PlayLayer::uiStancePressed() {
+	if (m->pausedByUI || m->previewMode || !m->player) return;
+	m->player->requestStanceSwitch();
 }
 
 void FL_PlayLayer::uiPauseRestartPressed() {

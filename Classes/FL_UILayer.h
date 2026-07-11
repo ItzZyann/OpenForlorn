@@ -34,6 +34,7 @@ private:
         DIR_UP,
         DIR_DOWN,
         DIR_MENU,
+        DIR_STANCE,
         DIR_PAUSE_RESUME,
         DIR_PAUSE_RESTART,
         DIR_PAUSE_QUIT,

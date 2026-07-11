@@ -2,10 +2,13 @@
 #include "incl.h"
 #include "FL_Block.h"
 #include "FL_UILayerDelegate.h"
+#include "FL_PlayerStance.h"
+#include "Triggers/FL_TriggerSystem.h"
 
 #include <string>
+#include <vector>
 
-class FL_PlayLayer : public CCLayer, public FL_UILayerDelegate {
+class FL_PlayLayer : public CCLayer, public FL_UILayerDelegate, public FL_TriggerHost {
 public:
     struct Args {
         std::string levelFile;
@@ -44,6 +47,7 @@ public:
     virtual void uiRightPressed() override;
     virtual void uiRightReleased() override;
     virtual void uiMenuPressed() override;
+    virtual void uiStancePressed() override;
     virtual void uiPauseRestartPressed() override;
     virtual void uiPauseQuitPressed() override;
     virtual void uiPauseSoundPressed() override;
@@ -56,6 +60,24 @@ public:
     virtual void update(float dt);
 
     void attachFixedBackground(CCNode* parent, int zOrder);
+    void spawnAttackProjectile(const CCPoint& playerPosition, bool facingRight, bool airborne, FL_PlayerStanceType stance);
+
+    virtual void triggerCamera(const CCPoint& offset, bool hasOffset, float zoomTarget,
+        bool hasZoom, bool lockCamera, const CCPoint& lockPosition, bool hasLockPosition,
+        bool resetCamera, float moveDuration, float zoomDuration,
+        const std::string& moveEasing, const std::string& zoomEasing,
+        bool instantMove, bool instantZoom);
+    virtual void triggerCameraMove(const std::vector<CCPoint>& points,
+        const std::vector<float>& durations, const std::vector<float>& delays,
+        const std::vector<std::string>& easing, bool dontReturnToPlayer);
+    virtual void triggerTeleport(const CCPoint& target, bool fade);
+    virtual void triggerShake(float duration, const CCPoint& strength);
+    virtual void triggerExitLevel(bool dontMove);
+    virtual void triggerPlaySound(const std::string& sound);
+    virtual void triggerReleaseCamera();
+    virtual void triggerCommand(const std::string& type, const std::string& value,
+        const std::string& secondary, const CCPoint& point, float amount,
+        bool enabled, bool alternate);
 
 private:
     struct Members;

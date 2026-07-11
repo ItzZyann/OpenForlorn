@@ -78,16 +78,14 @@ void FL_Block::runAnimationLooped(const Data& data) {
 	if (dot != std::string::npos) baseName = baseName.substr(0, dot);
 
 	CCSpriteFrameCache* cache = CCSpriteFrameCache::sharedSpriteFrameCache();
-	CCArray* startFrames = CCArray::create();
-	CCArray* loopFrames = CCArray::create();
-	CCArray* fadeFrames = CCArray::create();
+	CCArray* frames = CCArray::create();
 
 	if (!data.skipStartAnim) {
 		for (int index = 1;; ++index) {
 			CCString* name = CCString::createWithFormat("%s_start_%03d.png", baseName.c_str(), index);
 			CCSpriteFrame* frame = cache->spriteFrameByName(name->getCString());
 			if (!frame) break;
-			startFrames->addObject(frame);
+			frames->addObject(frame);
 		}
 	}
 
@@ -95,39 +93,25 @@ void FL_Block::runAnimationLooped(const Data& data) {
 		CCString* name = CCString::createWithFormat("%s_looped_%03d.png", baseName.c_str(), index);
 		CCSpriteFrame* frame = cache->spriteFrameByName(name->getCString());
 		if (!frame) break;
-		loopFrames->addObject(frame);
+		frames->addObject(frame);
 	}
 
 	if (!data.skipEndAnim) {
 		for (int index = 1;; ++index) {
-			CCString* name = CCString::createWithFormat("%s_fade_%03d.png", baseName.c_str(), index);
+			CCString* name = CCString::createWithFormat("%s_end_%03d.png", baseName.c_str(), index);
 			CCSpriteFrame* frame = cache->spriteFrameByName(name->getCString());
 			if (!frame) break;
-			fadeFrames->addObject(frame);
+			frames->addObject(frame);
 		}
 	}
 
-	const float frameDelay = 1.0f / 12.0f;
-	if (loopFrames->count() > 0) {
-		CCAnimate* loopAnimate = CCAnimate::create(CCAnimation::createWithSpriteFrames(loopFrames, frameDelay));
-		CCRepeatForever* loop = CCRepeatForever::create(loopAnimate);
-		if (startFrames->count() > 0) {
-			CCAnimate* start = CCAnimate::create(CCAnimation::createWithSpriteFrames(startFrames, frameDelay));
-			runAction(CCSequence::create(start, loop, NULL));
-		}
-		else {
-			runAction(loop);
-		}
-		return;
-	}
-
-	CCArray* fallback = startFrames->count() > 0 ? startFrames : fadeFrames;
-	if (fallback->count() > 0) {
-		CCAnimate* animate = CCAnimate::create(CCAnimation::createWithSpriteFrames(fallback, frameDelay));
+	if (frames->count() > 0) {
+		CCAnimate* animate = CCAnimate::create(
+			CCAnimation::createWithSpriteFrames(frames, 1.0f / 12.0f));
 		runAction(CCRepeatForever::create(animate));
 	}
 	else {
-		CCLog("Skipping animation for block %s: no frames found.", data.texture.c_str());
+		CCLog("Skipping animation for block %s: No frames found.", data.texture.c_str());
 	}
 }
 
