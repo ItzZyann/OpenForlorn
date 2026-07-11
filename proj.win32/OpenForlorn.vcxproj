@@ -134,6 +134,8 @@ xcopy /Y /Q "$(ProjectDir)..\..\..\external\libwebsockets\win32\lib\*.*" "$(OutD
     <ClCompile Include="..\Classes\AppDelegate.cpp" />
     <ClCompile Include="..\Classes\CCMenuItemSpriteExtra.cpp" />
     <ClCompile Include="..\Classes\FL_Block.cpp" />
+    <ClCompile Include="..\Classes\FL_ButtonTrigger.cpp" />
+    <ClCompile Include="..\Classes\FL_CheckpointTrigger.cpp" />
     <ClCompile Include="..\Classes\FL_CollisionWorld.cpp" />
     <ClCompile Include="..\Classes\FL_LevelLoadingLayer.cpp" />
     <ClCompile Include="..\Classes\FL_LevelScene.cpp" />
@@ -150,6 +152,8 @@ xcopy /Y /Q "$(ProjectDir)..\..\..\external\libwebsockets\win32\lib\*.*" "$(OutD
     <ClInclude Include="..\Classes\AppMacros.h" />
     <ClInclude Include="..\Classes\CCMenuItemSpriteExtra.h" />
     <ClInclude Include="..\Classes\FL_Block.h" />
+    <ClInclude Include="..\Classes\FL_ButtonTrigger.h" />
+    <ClInclude Include="..\Classes\FL_CheckpointTrigger.h" />
     <ClInclude Include="..\Classes\FL_CollisionWorld.h" />
     <ClInclude Include="..\Classes\FL_LevelLoadingLayer.h" />
     <ClInclude Include="..\Classes\FL_LevelScene.h" />

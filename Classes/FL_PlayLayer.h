@@ -43,6 +43,13 @@ public:
     virtual void uiLeftReleased() override;
     virtual void uiRightPressed() override;
     virtual void uiRightReleased() override;
+    virtual void uiMenuPressed() override;
+    virtual void uiPauseRestartPressed() override;
+    virtual void uiPauseQuitPressed() override;
+    virtual void uiPauseSoundPressed() override;
+    virtual bool uiSoundEnabled() const override;
+    virtual int uiCurrentHealth() const override;
+    virtual int uiMaximumHealth() const override;
 
     virtual void onEnter();
     virtual void onExit();

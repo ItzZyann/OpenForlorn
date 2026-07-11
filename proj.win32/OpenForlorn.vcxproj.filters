@@ -48,6 +48,12 @@
     <ClCompile Include="..\Classes\FL_LevelScene.cpp">
       <Filter>Classes</Filter>
     </ClCompile>
+    <ClCompile Include="..\Classes\FL_CheckpointTrigger.cpp">
+      <Filter>Classes</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\FL_ButtonTrigger.cpp">
+      <Filter>Classes</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="main.h">
@@ -99,6 +105,12 @@
       <Filter>Classes</Filter>
     </ClInclude>
     <ClInclude Include="..\Classes\FL_LevelScene.h">
+      <Filter>Classes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\FL_CheckpointTrigger.h">
+      <Filter>Classes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\FL_ButtonTrigger.h">
       <Filter>Classes</Filter>
     </ClInclude>
   </ItemGroup>
