@@ -19,7 +19,7 @@ bool FL_UILayer::init() {
 	m_dpadSprite->setPosition(ccp(
 		20.0f + m_dpadSprite->getContentSize().width / 2.0f,
 		20.0f + m_dpadSprite->getContentSize().height / 2.0f
-	));
+		));
 	addChild(m_dpadSprite, 100);
 
 	m_attackIdleFrame = sprch->spriteFrameByName("Attack_Btn.png");
@@ -41,12 +41,12 @@ bool FL_UILayer::init() {
 	m_jumpSprite->setPosition(ccp(
 		winSize.width - rightMargin - m_jumpSprite->getContentSize().width / 2.0f,
 		bottomMargin + m_jumpSprite->getContentSize().height / 2.0f
-	));
+		));
 	m_attackSprite->setPosition(ccp(
 		m_jumpSprite->getPositionX() - m_jumpSprite->getContentSize().width / 2.0f
-			- gap - m_attackSprite->getContentSize().width / 2.0f,
+		- gap - m_attackSprite->getContentSize().width / 2.0f,
 		bottomMargin + m_attackSprite->getContentSize().height / 2.0f
-	));
+		));
 
 	addChild(m_attackSprite, 100);
 	addChild(m_jumpSprite, 100);
@@ -58,8 +58,8 @@ bool FL_UILayer::init() {
 
 void FL_UILayer::registerWithTouchDispatcher() {
 	CCDirector::sharedDirector()
-        ->getTouchDispatcher()
-            ->addTargetedDelegate(this, 0, true);
+		->getTouchDispatcher()
+		->addTargetedDelegate(this, 0, true);
 }
 
 void FL_UILayer::setDelegate(FL_UILayerDelegate* delegate) {
@@ -73,7 +73,7 @@ FL_UILayer::Direction FL_UILayer::hitTest(const CCPoint& loc) {
 	float dpadRight = dpadPos.x + dpadSize.width / 2.0f;
 	float dpadBottom = dpadPos.y - dpadSize.height / 2.0f;
 	float dpadTop = dpadPos.y + dpadSize.height / 2.0f;
-	if(loc.x >= dpadLeft && loc.x <= dpadRight && loc.y >= dpadBottom && loc.y <= dpadTop) {
+	if (loc.x >= dpadLeft && loc.x <= dpadRight && loc.y >= dpadBottom && loc.y <= dpadTop) {
 		return (loc.x < dpadPos.x) ? DIR_LEFT : DIR_RIGHT;
 	}
 
@@ -83,7 +83,7 @@ FL_UILayer::Direction FL_UILayer::hitTest(const CCPoint& loc) {
 	float jumpRight = jumpPos.x + jumpSize.width / 2.0f;
 	float jumpBottom = jumpPos.y - jumpSize.height / 2.0f;
 	float jumpTop = jumpPos.y + jumpSize.height / 2.0f;
-	if(loc.x >= jumpLeft && loc.x <= jumpRight && loc.y >= jumpBottom && loc.y <= jumpTop) {
+	if (loc.x >= jumpLeft && loc.x <= jumpRight && loc.y >= jumpBottom && loc.y <= jumpTop) {
 		return DIR_UP;
 	}
 
@@ -93,7 +93,7 @@ FL_UILayer::Direction FL_UILayer::hitTest(const CCPoint& loc) {
 	float atkRight = atkPos.x + atkSize.width / 2.0f;
 	float atkBottom = atkPos.y - atkSize.height / 2.0f;
 	float atkTop = atkPos.y + atkSize.height / 2.0f;
-	if(loc.x >= atkLeft && loc.x <= atkRight && loc.y >= atkBottom && loc.y <= atkTop) {
+	if (loc.x >= atkLeft && loc.x <= atkRight && loc.y >= atkBottom && loc.y <= atkTop) {
 		return DIR_DOWN;
 	}
 
@@ -105,20 +105,20 @@ void FL_UILayer::pressDirection(Direction dir) {
 	case DIR_LEFT:
 		m_dpadSprite->setDisplayFrame(m_dpadDwnFrame);
 		m_dpadSprite->setFlipX(false);
-		if(m_delegate) m_delegate->uiLeftPressed();
+		if (m_delegate) m_delegate->uiLeftPressed();
 		break;
 	case DIR_RIGHT:
 		m_dpadSprite->setDisplayFrame(m_dpadDwnFrame);
 		m_dpadSprite->setFlipX(true);
-		if(m_delegate) m_delegate->uiRightPressed();
+		if (m_delegate) m_delegate->uiRightPressed();
 		break;
 	case DIR_UP:
 		m_jumpSprite->setDisplayFrame(m_jumpDwnFrame);
-		if(m_delegate) m_delegate->uiUpPressed();
+		if (m_delegate) m_delegate->uiUpPressed();
 		break;
 	case DIR_DOWN:
 		m_attackSprite->setDisplayFrame(m_attackDwnFrame);
-		if(m_delegate) m_delegate->uiDownPressed();
+		if (m_delegate) m_delegate->uiDownPressed();
 		break;
 	default:
 		break;
@@ -130,20 +130,20 @@ void FL_UILayer::releaseDirection(Direction dir) {
 	case DIR_LEFT:
 		m_dpadSprite->setDisplayFrame(m_dpadIdleFrame);
 		m_dpadSprite->setFlipX(false);
-		if(m_delegate) m_delegate->uiLeftReleased();
+		if (m_delegate) m_delegate->uiLeftReleased();
 		break;
 	case DIR_RIGHT:
 		m_dpadSprite->setDisplayFrame(m_dpadIdleFrame);
 		m_dpadSprite->setFlipX(false);
-		if(m_delegate) m_delegate->uiRightReleased();
+		if (m_delegate) m_delegate->uiRightReleased();
 		break;
 	case DIR_UP:
 		m_jumpSprite->setDisplayFrame(m_jumpIdleFrame);
-		if(m_delegate) m_delegate->uiUpReleased();
+		if (m_delegate) m_delegate->uiUpReleased();
 		break;
 	case DIR_DOWN:
 		m_attackSprite->setDisplayFrame(m_attackIdleFrame);
-		if(m_delegate) m_delegate->uiDownReleased();
+		if (m_delegate) m_delegate->uiDownReleased();
 		break;
 	default:
 		break;
@@ -153,7 +153,7 @@ void FL_UILayer::releaseDirection(Direction dir) {
 bool FL_UILayer::ccTouchBegan(CCTouch* touch, CCEvent* event) {
 	CCPoint loc = this->convertTouchToNodeSpace(touch);
 	Direction dir = hitTest(loc);
-	if(dir == DIR_NONE) return false;
+	if (dir == DIR_NONE) return false;
 
 	pressDirection(dir);
 	m_activeTouches[touch] = dir;
@@ -168,7 +168,7 @@ void FL_UILayer::ccTouchMoved(CCTouch* touch, CCEvent* event) {
 	CCPoint loc = this->convertTouchToNodeSpace(touch);
 	Direction newDir = hitTest(loc);
 
-	if(newDir != it->second && (newDir == DIR_LEFT || newDir == DIR_RIGHT)) {
+	if (newDir != it->second && (newDir == DIR_LEFT || newDir == DIR_RIGHT)) {
 		releaseDirection(it->second);
 		pressDirection(newDir);
 		it->second = newDir;
@@ -177,7 +177,7 @@ void FL_UILayer::ccTouchMoved(CCTouch* touch, CCEvent* event) {
 
 void FL_UILayer::ccTouchEnded(CCTouch* touch, CCEvent* event) {
 	std::map<CCTouch*, Direction>::iterator it = m_activeTouches.find(touch);
-	if(it == m_activeTouches.end()) return;
+	if (it == m_activeTouches.end()) return;
 
 	releaseDirection(it->second);
 	m_activeTouches.erase(it);
