@@ -1,4 +1,4 @@
-﻿#if defined(_WIN32) || defined(_WIN64)
+#if defined(_WIN32) || defined(_WIN64)
 #  ifndef NOMINMAX
 #    define NOMINMAX
 #  endif
@@ -182,11 +182,13 @@ namespace {
 		float frameDelay;
 		float displayScale;
 		CCSize boundsSize;
+		int contactDamage;
 
 		EntityDescriptor()
 			: frameDelay(0.1f)
 			, displayScale(1.0f)
-			, boundsSize(CCSizeMake(128.0f, 128.0f)) {
+			, boundsSize(CCSizeMake(128.0f, 128.0f))
+			, contactDamage(0) {
 		}
 	};
 
@@ -828,6 +830,13 @@ namespace {
 			std::max(32.0f, dictionaryFloat(definition, "width", 128.0f)),
 			std::max(32.0f, dictionaryFloat(definition, "height", 128.0f))
 			);
+		descriptor->contactDamage = std::max(0, static_cast<int>(
+			dictionaryFloat(
+				definition,
+				"damagePoints",
+				dictionaryFloat(definition, "damage", 0.0f)
+			)
+		));
 
 		if (!loadAtlas(descriptor->sheetName, loadedAtlases)) return std::shared_ptr<EntityDescriptor>();
 
@@ -1048,6 +1057,7 @@ namespace {
 } // namespace
 
 struct FL_PlayLayer::Members {
+	FL_PlayLayer::Args sceneArgs;
 	CCPoint cameraPos;
 	CCPoint spawnPos;
 	CCSize levelSize;
@@ -1082,6 +1092,8 @@ struct FL_PlayLayer::Members {
 	bool left;
 	bool right;
 	bool jumpInputWasDown;
+	bool pausedByUI;
+	bool soundEnabled;
 	FL_Player* player;
 
 	CCPoint lastTouchPos;
@@ -1123,6 +1135,8 @@ struct FL_PlayLayer::Members {
 		, left(false)
 		, right(false)
 		, jumpInputWasDown(false)
+		, pausedByUI(false)
+		, soundEnabled(true)
 		, player(NULL)
 		, lastTouchPos(CCPointZero)
 		, isDragging(false)
@@ -1299,6 +1313,8 @@ FL_PlayLayer::~FL_PlayLayer() {
 
 bool FL_PlayLayer::init(const Args& args) {
 	if (!CCLayer::init()) return false;
+
+	m->sceneArgs = args;
 
 	// CCLayer defaults to a centered anchor. Camera math below is origin-based;
 	// leaving the default anchor would add an extra zoom-dependent shift and put
@@ -1556,7 +1572,38 @@ void FL_PlayLayer::update(float dt) {
 		m->jumpInputWasDown = jumpInputDown;
 		m->player->step(dt);
 
-		const CCPoint playerPosition = m->player->getPosition();
+		CCPoint playerPosition = m->player->getPosition();
+		const CCRect playerBounds = m->player->getCollisionBounds();
+		for (std::vector<EntityRuntime>::iterator entity = m->entities.begin();
+			entity != m->entities.end(); ++entity) {
+			if (!entity->active || !entity->visible || !entity->root ||
+				!entity->descriptor || entity->descriptor->contactDamage <= 0) {
+				continue;
+			}
+
+			const CCPoint entityPosition = entity->root->getPosition();
+			const float width = entity->descriptor->boundsSize.width *
+				std::fabs(entity->root->getScaleX());
+			const float height = entity->descriptor->boundsSize.height *
+				std::fabs(entity->root->getScaleY());
+			const CCRect entityBounds(
+				entityPosition.x - width * 0.5f,
+				entityPosition.y - height * 0.5f,
+				width,
+				height
+			);
+			if (!rectsIntersect(playerBounds, entityBounds)) continue;
+
+			if (m->player->takeDamage(
+				entity->descriptor->contactDamage,
+				entityPosition,
+				230.0f,
+				300.0f
+			)) {
+				playerPosition = m->player->getPosition();
+			}
+			break;
+		}
 
 		// A spatial trigger is selected by the player's center point. Testing the
 		// whole body made adjacent/overlapping camera zones fire too early and, in
@@ -1719,12 +1766,76 @@ void FL_PlayLayer::update(float dt) {
 
 void FL_PlayLayer::uiUpPressed() { m->up = true; }
 void FL_PlayLayer::uiUpReleased() { m->up = false; }
-void FL_PlayLayer::uiDownPressed() { m->down = true; }
+void FL_PlayLayer::uiDownPressed() {
+	m->down = true;
+	if (m->player) m->player->requestAttack();
+}
 void FL_PlayLayer::uiDownReleased() { m->down = false; }
 void FL_PlayLayer::uiLeftPressed() { m->left = true; }
 void FL_PlayLayer::uiLeftReleased() { m->left = false; }
 void FL_PlayLayer::uiRightPressed() { m->right = true; }
 void FL_PlayLayer::uiRightReleased() { m->right = false; }
+
+void FL_PlayLayer::uiMenuPressed() {
+	m->pausedByUI = !m->pausedByUI;
+	m->up = false;
+	m->down = false;
+	m->left = false;
+	m->right = false;
+	m->jumpInputWasDown = false;
+	if (m->player) m->player->setMoveInput(0.0f);
+
+	if (m->pausedByUI) {
+		pauseSchedulerAndActions();
+		if (m->player) m->player->pauseSchedulerAndActions();
+		for (std::vector<RuntimeNode>::iterator runtime = m->runtimeNodes.begin();
+			runtime != m->runtimeNodes.end(); ++runtime) {
+			if (runtime->node) runtime->node->pauseSchedulerAndActions();
+		}
+	}
+	else {
+		resumeSchedulerAndActions();
+		if (m->player) m->player->resumeSchedulerAndActions();
+		for (std::vector<RuntimeNode>::iterator runtime = m->runtimeNodes.begin();
+			runtime != m->runtimeNodes.end(); ++runtime) {
+			if (runtime->node && runtime->active) runtime->node->resumeSchedulerAndActions();
+		}
+	}
+}
+
+void FL_PlayLayer::uiPauseRestartPressed() {
+	CCScene* gameScene = FL_PlayLayer::scene(m->sceneArgs);
+	if (gameScene) {
+		CCDirector::sharedDirector()->replaceScene(
+			CCTransitionFade::create(0.25f, gameScene)
+		);
+	}
+}
+
+void FL_PlayLayer::uiPauseQuitPressed() {
+	keyBackClicked();
+}
+
+void FL_PlayLayer::uiPauseSoundPressed() {
+	m->soundEnabled = !m->soundEnabled;
+	SimpleAudioEngine* audio = SimpleAudioEngine::sharedEngine();
+	if (!audio) return;
+	const float volume = m->soundEnabled ? 1.0f : 0.0f;
+	audio->setBackgroundMusicVolume(volume);
+	audio->setEffectsVolume(volume);
+}
+
+bool FL_PlayLayer::uiSoundEnabled() const {
+	return m->soundEnabled;
+}
+
+int FL_PlayLayer::uiCurrentHealth() const {
+	return m->player ? m->player->getHealth() : 0;
+}
+
+int FL_PlayLayer::uiMaximumHealth() const {
+	return m->player ? m->player->getMaxHealth() : 12;
+}
 
 bool FL_PlayLayer::ccTouchBegan(CCTouch* touch, CCEvent*) {
 	m->isDragging = true;
