@@ -135,6 +135,7 @@ xcopy /Y /Q "$(ProjectDir)..\..\..\external\libwebsockets\win32\lib\*.*" "$(OutD
     <ClCompile Include="..\Classes\CCMenuItemSpriteExtra.cpp" />
     <ClCompile Include="..\Classes\FL_Block.cpp" />
     <ClCompile Include="..\Classes\FL_CollisionWorld.cpp" />
+    <ClCompile Include="..\Classes\FL_LevelLoadingLayer.cpp" />
     <ClCompile Include="..\Classes\FL_LoadingLayer.cpp" />
     <ClCompile Include="..\Classes\FL_MenuLayer.cpp" />
     <ClCompile Include="..\Classes\FL_Player.cpp" />
@@ -149,6 +150,7 @@ xcopy /Y /Q "$(ProjectDir)..\..\..\external\libwebsockets\win32\lib\*.*" "$(OutD
     <ClInclude Include="..\Classes\CCMenuItemSpriteExtra.h" />
     <ClInclude Include="..\Classes\FL_Block.h" />
     <ClInclude Include="..\Classes\FL_CollisionWorld.h" />
+    <ClInclude Include="..\Classes\FL_LevelLoadingLayer.h" />
     <ClInclude Include="..\Classes\FL_LoadingLayer.h" />
     <ClInclude Include="..\Classes\FL_MenuLayer.h" />
     <ClInclude Include="..\Classes\FL_Player.h" />
