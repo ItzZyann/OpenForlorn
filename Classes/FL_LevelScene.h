@@ -19,7 +19,9 @@ public:
 	CREATE_FUNC(FL_LevelScene);
 
 private:
-	CCLayer* m_internalLayer; 
-	CCMenu* m_mapDefinitions;
-	CCDictionary* m_mapData;
+	CCLayer*           m_internalLayer;
+	CCMenu*            m_mapDefinitions;
+	CCSpriteBatchNode* m_uiSheet;
+	CCDictionary*      m_mapData;
+	int                m_displayCount;
 };

@@ -126,6 +126,9 @@
     <ClCompile Include="..\Classes\particles\FL_ProjectileBreakParticles.cpp">
       <Filter>Classes\particles</Filter>
     </ClCompile>
+    <ClCompile Include="..\Classes\LagrangeDescriptor.cpp">
+      <Filter>Classes</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="main.h">
@@ -358,6 +361,9 @@
     </ClInclude>
     <ClInclude Include="..\Classes\particles\FL_ProjectileBreakParticles.h">
       <Filter>Classes\particles</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\LagrangeDescriptor.h">
+      <Filter>Classes</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

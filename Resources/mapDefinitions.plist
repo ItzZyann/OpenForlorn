@@ -7,47 +7,47 @@
 		<key>001</key>
 		<dict>
 			<key>Start</key>
-			<string>{360, 170}</string>
+			<string>{510, 370}</string>
 			<key>point1</key>
-			<string>{360, 170}</string>
+			<string>{700, 390}</string>
 			<key>point2</key>
-			<string>{420, 200}</string>
+			<string>{780, 460}</string>
 		</dict>
 		<key>002</key>
 		<dict>
 			<key>Start</key>
-			<string>{500, 300}</string>
+			<string>{620, 500}</string>
 			<key>point1</key>
-			<string>{500, 300}</string>
+			<string>{560, 510}</string>
 			<key>point2</key>
-			<string>{530, 330}</string>
+			<string>{500, 490}</string>
 		</dict>
 		<key>003</key>
 		<dict>
 			<key>Start</key>
-			<string>{500, 400}</string>
+			<string>{430, 460}</string>
 			<key>point1</key>
-			<string>{500, 400}</string>
+			<string>{380, 440}</string>
 			<key>point2</key>
-			<string>{400, 400}</string>
+			<string>{350, 410}</string>
 		</dict>
 		<key>004</key>
 		<dict>
 			<key>Start</key>
-			<string>{320, 300}</string>
+			<string>{320, 380}</string>
 			<key>point1</key>
-			<string>{320, 300}</string>
+			<string>{310, 360}</string>
 			<key>point2</key>
-			<string>{320, 300}</string>
+			<string>{300, 340}</string>
 		</dict>
 		<key>005</key>
 		<dict>
 			<key>Start</key>
-			<string>{320, 400}</string>
+			<string>{290, 310}</string>
 			<key>point1</key>
-			<string>{320, 400}</string>
+			<string>{290, 310}</string>
 			<key>point2</key>
-			<string>{320, 400}</string>
+			<string>{290, 310}</string>
 		</dict>
 		<key>006</key>
 		<dict>
