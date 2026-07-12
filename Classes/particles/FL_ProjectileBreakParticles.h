@@ -47,7 +47,7 @@ inline void FL_ProjectileBreakParticles::ensureFramesLoaded() {
     static bool loaded = false;
     if (loaded) return;
     CCSpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile("particleImgSheet.plist");
-    CCSpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile("Effects_spritesheet_01.plist");
+    CCSpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile("Effects_spritesheet_01-hd.plist");
     loaded = true;
 }
 
@@ -172,10 +172,10 @@ inline CCParticleSystemQuad* FL_ProjectileBreakParticles::createFromPlist(
 
     particle->setAngle(dictionaryFloat(dictionary, "angle", 0.0f));
     particle->setAngleVar(dictionaryFloat(dictionary, "angleVariance", 0.0f));
-    particle->setStartSize(dictionaryFloat(dictionary, "startParticleSize", 8.0f));
-    particle->setStartSizeVar(dictionaryFloat(dictionary, "startParticleSizeVariance", 0.0f));
-    particle->setEndSize(dictionaryFloat(dictionary, "finishParticleSize", 0.0f));
-    particle->setEndSizeVar(dictionaryFloat(dictionary, "finishParticleSizeVariance", 0.0f));
+    particle->setStartSize(dictionaryFloat(dictionary, "startParticleSize", 8.0f)*2.f);
+    particle->setStartSizeVar(dictionaryFloat(dictionary, "startParticleSizeVariance", 0.0f)*2.f);
+    particle->setEndSize(dictionaryFloat(dictionary, "finishParticleSize", 0.0f)*2.f);
+    particle->setEndSizeVar(dictionaryFloat(dictionary, "finishParticleSizeVariance", 0.0f)*2.f);
     particle->setPosVar(ccp(
         dictionaryFloat(dictionary, "sourcePositionVariancex", 0.0f),
         dictionaryFloat(dictionary, "sourcePositionVariancey", 0.0f)
@@ -320,11 +320,14 @@ inline void FL_ProjectileBreakParticles::spawnProjectileBreak(
         ));
     }
 
+    // The animated projectile explosion is intentionally disabled.  The
+    // original impact particle system above remains visible on destruction.
+#if 0
     CCSprite* hitSprite = createFirstHitSprite(stance);
     if (hitSprite) {
         hitSprite->setPosition(impactPosition);
-        hitSprite->setScale(0.75f);
-        hitSprite->setScaleX(facingRight ? 0.75f : -0.75f);
+        hitSprite->setScale(1.5f);
+        hitSprite->setScaleX(facingRight ? 1.5f : -1.5f);
         hitSprite->setVisible(delay <= 0.0f);
         applyMagicBlend(hitSprite);
         parent->addChild(hitSprite, effectZ());
@@ -340,4 +343,5 @@ inline void FL_ProjectileBreakParticles::spawnProjectileBreak(
             NULL
         ));
     }
+#endif
 }

@@ -36,15 +36,10 @@ bool FL_LevelScene::init() {
 
 	m_internalLayer = CCLayer::create();
 
-	CCSprite* worldMap = CCSprite::create("FL_Map_World-hd.png");
+	CCSprite* worldMap = CCSprite::create("FL_Map_World.png");
 	if (worldMap) {
-		// The map image is scene content, not UI: keep its authored 1x map size.
-		worldMap->setScale(0.5f);
 		m_internalLayer->addChild(worldMap);
-		m_internalLayer->setContentSize(CCSizeMake(
-			worldMap->getContentSize().width * 0.5f,
-			worldMap->getContentSize().height * 0.5f
-			));
+		m_internalLayer->setContentSize(worldMap->getContentSize());
 	}
 	else {
 		m_internalLayer->setContentSize(CCSizeZero);
@@ -57,10 +52,14 @@ bool FL_LevelScene::init() {
 	m_mapDefinitions->setPosition(CCPointZero);
 	m_internalLayer->addChild(m_mapDefinitions, 2);
 
-	CCSpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile("MenuSheet-hd.plist");
+	CCSpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile("MenuSheet.plist");
+	// The menu may previously have loaded UISheet-hd.plist under the same frame
+	// names. Reload the exact atlas used by this batch node so mapDot frames and
+	// the batch always share one CCTexture2D (CCSpriteBatchNode asserts otherwise).
+	CCSpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile("UISheet.plist");
 
-	m_uiSheet = CCSpriteBatchNode::create("UISheet-hd.png");
-	m_internalLayer->addChild(m_uiSheet, 1);
+	m_uiSheet = CCSpriteBatchNode::create("UISheet.png");
+	if (m_uiSheet) m_internalLayer->addChild(m_uiSheet, 1);
 
 	std::string fullPath = CCFileUtils::sharedFileUtils()->fullPathForFilename("mapDefinitions.plist");
 	m_mapData = CCDictionary::createWithContentsOfFile(fullPath.c_str());
@@ -108,7 +107,16 @@ void FL_LevelScene::addPathFromArray(CCArray* points, bool fade) {
 			if (ptStr) pt = CCPointFromString(ptStr->getCString());
 		}
 
-		CCSprite* dot = CCSprite::createWithSpriteFrameName("mapDot_001.png");
+		if (!m_uiSheet) return;
+		CCSpriteFrame* dotFrame = CCSpriteFrameCache::sharedSpriteFrameCache()->spriteFrameByName("mapDot_001.png");
+		if (!dotFrame || dotFrame->getTexture() != m_uiSheet->getTexture()) {
+			// A later cache mutation must never be allowed to crash the map.
+			CCSpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile("UISheet.plist");
+			dotFrame = CCSpriteFrameCache::sharedSpriteFrameCache()->spriteFrameByName("mapDot_001.png");
+		}
+		if (!dotFrame || dotFrame->getTexture() != m_uiSheet->getTexture()) continue;
+		CCSprite* dot = CCSprite::createWithSpriteFrame(dotFrame);
+		if (!dot) continue;
 		dot->setPosition(pt);
 		m_uiSheet->addChild(dot);
 

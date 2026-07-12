@@ -24,6 +24,8 @@ public:
     virtual void ccTouchEnded(CCTouch* touch, CCEvent* event);
     virtual void ccTouchCancelled(CCTouch* touch, CCEvent* event);
 
+    void togglePauseFromKeyboard();
+
     CREATE_FUNC(FL_UILayer);
 
 private:

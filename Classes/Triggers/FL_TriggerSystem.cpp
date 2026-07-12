@@ -1,5 +1,6 @@
 #include "Triggers/FL_TriggerSystem.h"
 #include "Triggers/FL_TriggerJson.h"
+#include "Triggers/TriggerMovableDespawner.h"
 
 #include <algorithm>
 #include <cmath>
@@ -11,7 +12,7 @@ namespace FLTriggers {
 TriggerSystem::TriggerSystem():activeSpatialCamera_(NULL){}
 bool TriggerSystem::load(const flrapidjson::Value& c){if(!c.IsObject())return false;
  for(flrapidjson::Value::ConstMemberIterator it=c.MemberBegin();it!=c.MemberEnd();++it){if(!it->value.IsObject())continue;std::string t=Json::lower(Json::scalar(it->value,"Type"));std::shared_ptr<Trigger>x;
-  if(t=="cameratrigger")x.reset(new TriggerCamera);else if(t=="triggercameramove")x.reset(new TriggerCameraMove);else if(t=="triggeronoff")x.reset(new TriggerOnOff);else if(t=="triggerdeactivate")x.reset(new TriggerDeactivate);else if(t=="triggerexitlevel")x.reset(new TriggerExitLevel);else if(t=="teleporttrigger")x.reset(new TeleportTrigger);else if(t=="triggereventshake")x.reset(new TriggerEventShake);else if(t=="triggeraicommand")x.reset(new TriggerAICommand);else x.reset(new TriggerCommand);
+  if(t=="cameratrigger")x.reset(new TriggerCamera);else if(t=="triggercameramove")x.reset(new TriggerCameraMove);else if(t=="triggeronoff")x.reset(new TriggerOnOff);else if(t=="triggerdeactivate")x.reset(new TriggerDeactivate);else if(t=="triggerexitlevel")x.reset(new TriggerExitLevel);else if(t=="teleporttrigger")x.reset(new TeleportTrigger);else if(t=="triggereventshake")x.reset(new TriggerEventShake);else if(t=="triggeraicommand")x.reset(new TriggerAICommand);else if(t=="triggermovabledespawner")x.reset(new TriggerMovableDespawner);else x.reset(new TriggerCommand);
   x->load(it->name.GetString(),it->value);triggers_.push_back(x);if(!x->groupID().empty())groups_[x->groupID()].push_back(x.get());}
  std::sort(triggers_.begin(),triggers_.end(),[](const std::shared_ptr<Trigger>&a,const std::shared_ptr<Trigger>&b){return a->priority()<b->priority();});return true;}
 void TriggerSystem::update(float dt,const CCPoint&p,FL_TriggerHost&h){

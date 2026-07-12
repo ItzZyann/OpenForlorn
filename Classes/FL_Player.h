@@ -30,18 +30,23 @@ public:
     int getMaxHealth() const;
     bool isInvulnerable() const;
     CCRect getCollisionBounds();
-    void rideMovingPlatform(const CCPoint& delta, float platformTop);
-    void landOnMovingPlatform(float platformTop);
+    void rideMovingBlock(const CCPoint& delta, float platformTop);
+    void landOnMovingBlock(float platformTop);
+    void setPushing(bool pushing);
+    void setPulling(bool pulling, bool faceRight);
+    void propel(float sourceBounceX, float sourceBounceY);
 
     bool isGrounded() const;
     CCPoint getVelocity() const;
     bool isFacingRight() const;
+    bool isMeleeAttacking() const { return m_currentAttackMelee; }
     bool getAttackFacingRight() const;
     bool isFireStance() const;
     FL_PlayerStanceType getStance() const;
     FL_PlayerStanceType getAttackStance() const;
     void setCheckpoint(const CCPoint& position);
     void respawn();
+    void teleportTo(const CCPoint& position);
 
 private:
     enum AnimationState {
@@ -58,6 +63,7 @@ private:
         ANIMATION_JUMP_UP,
         ANIMATION_JUMP_MIDDLE,
         ANIMATION_JUMP_FALL
+        , ANIMATION_PUSH, ANIMATION_PULL
     };
 
     FL_Player();
@@ -90,6 +96,7 @@ private:
     void updateFacing();
     void updateDamageVisual();
     void startAttack();
+    void startMeleeComboStage(int stage);
     void startRoll(int direction);
     void switchStance();
     void refreshCurrentAnimationFrame();
@@ -109,6 +116,10 @@ private:
     const std::vector<CCSpriteFrame*>& activeAttack1Frames() const;
     const std::vector<CCSpriteFrame*>& activeAttack2Frames() const;
     const std::vector<CCSpriteFrame*>& activeAttackAirFrames() const;
+    const std::vector<CCSpriteFrame*>& activeMelee1Frames() const;
+    const std::vector<CCSpriteFrame*>& activeMelee2Frames() const;
+    const std::vector<CCSpriteFrame*>& activeMelee3Frames() const;
+    const std::vector<CCSpriteFrame*>& activeMeleeAirFrames() const;
     const std::vector<CCSpriteFrame*>& activeToRollFrames() const;
     const std::vector<CCSpriteFrame*>& activeFromRollFrames() const;
     const std::vector<CCSpriteFrame*>& activeGetHitFrames() const;
@@ -124,11 +135,17 @@ private:
     std::vector<CCSpriteFrame*> m_attack1Frames;
     std::vector<CCSpriteFrame*> m_attack2Frames;
     std::vector<CCSpriteFrame*> m_attackAirFrames;
+    std::vector<CCSpriteFrame*> m_melee1Frames;
+    std::vector<CCSpriteFrame*> m_melee2Frames;
+    std::vector<CCSpriteFrame*> m_melee3Frames;
+    std::vector<CCSpriteFrame*> m_meleeAirFrames;
     std::vector<CCSpriteFrame*> m_toRollFrames;
     std::vector<CCSpriteFrame*> m_fromRollFrames;
     CCSpriteFrame* m_rollFrame;
     std::vector<CCSpriteFrame*> m_getHitFrames;
     std::vector<CCSpriteFrame*> m_getHitAirFrames;
+    std::vector<CCSpriteFrame*> m_pushFrames;
+    std::vector<CCSpriteFrame*> m_pullFrames;
     CCSpriteFrame* m_jumpUpFrame;
     CCSpriteFrame* m_jumpMiddleFrame;
     CCSpriteFrame* m_jumpFallFrame;
@@ -138,10 +155,16 @@ private:
     std::vector<CCSpriteFrame*> m_fireAttack1Frames;
     std::vector<CCSpriteFrame*> m_fireAttack2Frames;
     std::vector<CCSpriteFrame*> m_fireAttackAirFrames;
+    std::vector<CCSpriteFrame*> m_fireMelee1Frames;
+    std::vector<CCSpriteFrame*> m_fireMelee2Frames;
+    std::vector<CCSpriteFrame*> m_fireMelee3Frames;
+    std::vector<CCSpriteFrame*> m_fireMeleeAirFrames;
     std::vector<CCSpriteFrame*> m_fireToRollFrames;
     std::vector<CCSpriteFrame*> m_fireFromRollFrames;
     std::vector<CCSpriteFrame*> m_fireGetHitFrames;
     std::vector<CCSpriteFrame*> m_fireGetHitAirFrames;
+    std::vector<CCSpriteFrame*> m_firePushFrames;
+    std::vector<CCSpriteFrame*> m_firePullFrames;
     CCSpriteFrame* m_fireRollFrame;
     CCSpriteFrame* m_fireJumpUpFrame;
     CCSpriteFrame* m_fireJumpMiddleFrame;
@@ -188,11 +211,20 @@ private:
     bool m_attackStrikeArmed;
     bool m_attackStrikeReady;
     bool m_nextGroundAttackIsFirst;
+    bool m_currentAttackMelee;
+    bool m_meleeAttackQueued;
     bool m_grounded;
+    bool m_dynamicGrounded;
+    bool m_pushing;
+    bool m_pulling;
+    bool m_pullFacingRight;
+    bool m_propelled;
+    bool m_propelHorizontalFade;
     bool m_facingRight;
     bool m_attackFacingRight;
     FL_PlayerStanceType m_stance;
     FL_PlayerStanceType m_attackStance;
     int m_queuedRollDirection;
     int m_rollDirection;
+    int m_meleeComboStage;
 };

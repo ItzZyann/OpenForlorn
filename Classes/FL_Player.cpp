@@ -46,8 +46,7 @@ namespace {
         float hurtLockDuration() { return 0.20f; }
         float attackCooldown() { return 0.4f; }
         float attackStrikeDelay() { return 0.12f; }
-        float attackReach() { return 88.0f; }
-        float attackHeight() { return 70.0f; }
+        float attackReach() { return 100.0f; }
         float rollSpeed() { return 300.0f; }
         float rollDuration() { return 0.40f; }
         float rollCooldown() { return 0.40f; }
@@ -158,13 +157,22 @@ FL_CPP_WEAK FL_Player::FL_Player()
     , m_attackStrikeArmed(false)
     , m_attackStrikeReady(false)
     , m_nextGroundAttackIsFirst(false)
+    , m_currentAttackMelee(false)
+    , m_meleeAttackQueued(false)
     , m_grounded(false)
+    , m_dynamicGrounded(false)
+    , m_pushing(false)
+    , m_pulling(false)
+    , m_pullFacingRight(true)
+    , m_propelled(false)
+    , m_propelHorizontalFade(false)
     , m_facingRight(true)
     , m_attackFacingRight(true)
     , m_stance(FL_PLAYER_STANCE_FROST)
     , m_attackStance(FL_PLAYER_STANCE_FROST)
     , m_queuedRollDirection(0)
-    , m_rollDirection(1) {
+    , m_rollDirection(1)
+    , m_meleeComboStage(0) {
 }
 
 FL_CPP_WEAK bool FL_Player::initialize(
@@ -336,6 +344,34 @@ FL_CPP_WEAK void FL_Player::loadAnimationFrames() {
         m_fireJumpMiddleFrame,
         m_fireJumpFallFrame
     );
+
+    FL_PlayerDetail::appendNumberedFrames(m_pushFrames, "Frost_Push_Anim_%03d.png", 1, 6);
+    FL_PlayerDetail::appendNumberedFrames(m_firePushFrames, "Fire_Push_Anim_%03d.png", 1, 6);
+    FL_PlayerDetail::appendNumberedFrames(m_pullFrames, "Frost_Pull_Anim_%03d.png", 1, 6);
+    FL_PlayerDetail::appendNumberedFrames(m_firePullFrames, "Fire_Pull_Anim_%03d.png", 1, 6);
+
+    // melee1/melee2/meleeAir in the original animation manager use the sword
+    // attack frames, while the normal ranged attack uses Cast_MainAttack.
+    const int melee1[] = {1,1,2,3,3,4,5,5,18,18,19};
+    const int melee2[] = {6,6,7,8,8,9,10,20,20};
+    const int melee3[] = {11,11,12,13,13,14,15,15,16,17,17};
+    const int meleeAir[] = {1,2,2,3,4,4,5};
+    for (unsigned int i=0;i<sizeof(melee1)/sizeof(melee1[0]);++i) {
+        FL_PlayerDetail::appendFrame(m_melee1Frames,"Frost_Attack_1_Anim_%03d.png",melee1[i]);
+        FL_PlayerDetail::appendFrame(m_fireMelee1Frames,"Fire_Attack_1_Anim_%03d.png",melee1[i]);
+    }
+    for (unsigned int i=0;i<sizeof(melee2)/sizeof(melee2[0]);++i) {
+        FL_PlayerDetail::appendFrame(m_melee2Frames,"Frost_Attack_1_Anim_%03d.png",melee2[i]);
+        FL_PlayerDetail::appendFrame(m_fireMelee2Frames,"Fire_Attack_1_Anim_%03d.png",melee2[i]);
+    }
+    for (unsigned int i=0;i<sizeof(melee3)/sizeof(melee3[0]);++i) {
+        FL_PlayerDetail::appendFrame(m_melee3Frames,"Frost_Attack_1_Anim_%03d.png",melee3[i]);
+        FL_PlayerDetail::appendFrame(m_fireMelee3Frames,"Fire_Attack_1_Anim_%03d.png",melee3[i]);
+    }
+    for (unsigned int i=0;i<sizeof(meleeAir)/sizeof(meleeAir[0]);++i) {
+        FL_PlayerDetail::appendFrame(m_meleeAirFrames,"Frost_AttackAir_1_Anim_%03d.png",meleeAir[i]);
+        FL_PlayerDetail::appendFrame(m_fireMeleeAirFrames,"Fire_AttackAir_1_Anim_%03d.png",meleeAir[i]);
+    }
 }
 
 FL_CPP_WEAK void FL_Player::setMoveInput(float direction) {
@@ -347,6 +383,10 @@ FL_CPP_WEAK void FL_Player::requestJump() {
 }
 
 FL_CPP_WEAK void FL_Player::requestAttack() {
+    if (m_attacking && m_currentAttackMelee && m_meleeComboStage > 0 && m_meleeComboStage < 3) {
+        m_meleeAttackQueued = true;
+        return;
+    }
     m_attackQueued = true;
 }
 
@@ -366,13 +406,11 @@ FL_CPP_WEAK bool FL_Player::consumeAttackStrike(CCRect& outBounds) {
 
     const CCPoint position = getPosition();
     const float width = FL_PlayerDetail::attackReach();
-    const float height = FL_PlayerDetail::attackHeight();
-    const float x = m_facingRight
-        ? position.x + m_bodyHalfWidth - 8.0f
-        : position.x - m_bodyHalfWidth - width + 8.0f;
+    const float height = m_bodyHalfHeight * 2.0f;
+    const float x = m_attackFacingRight ? position.x : position.x - width;
     outBounds = CCRect(
         x,
-        position.y - height * 0.5f + 2.0f,
+        position.y - m_bodyHalfHeight,
         width,
         height
     );
@@ -384,19 +422,39 @@ FL_CPP_WEAK int FL_Player::getAttackDamage() const {
 }
 
 FL_CPP_WEAK void FL_Player::startAttack() {
+    const CCPoint position = getPosition();
+    FL_PlayLayer* playLayer = static_cast<FL_PlayLayer*>(getParent());
+    bool meleeFacingRight = m_facingRight;
+    m_currentAttackMelee = playLayer && playLayer->findMeleeTarget(position, m_facingRight, meleeFacingRight);
+    if (m_currentAttackMelee) {
+        m_facingRight = meleeFacingRight;
+        if (m_sprite) m_sprite->setFlipX(!m_facingRight);
+        m_meleeAttackQueued = false;
+        startMeleeComboStage(1);
+        return;
+    }
+
+    const float reach = FL_PlayerDetail::attackReach();
+    const float height = m_bodyHalfHeight * 2.0f;
+    const float attackX = m_facingRight ? position.x : position.x - reach;
+    const CCRect prospectiveBounds(attackX, position.y - m_bodyHalfHeight, reach, height);
+	(void)prospectiveBounds;
+	m_meleeComboStage = 0;
+
     AnimationState attackState = ANIMATION_ATTACK_AIR;
-    const std::vector<CCSpriteFrame*>* attackFrames = &activeAttackAirFrames();
+    const std::vector<CCSpriteFrame*>* attackFrames = m_currentAttackMelee
+        ? &activeMeleeAirFrames() : &activeAttackAirFrames();
 
     if (m_grounded) {
-        if (m_nextGroundAttackIsFirst) {
+        if (m_currentAttackMelee || m_nextGroundAttackIsFirst) {
             attackState = ANIMATION_ATTACK_1;
-            attackFrames = &activeAttack1Frames();
+            attackFrames = m_currentAttackMelee ? &activeMelee1Frames() : &activeAttack1Frames();
         }
         else {
             attackState = ANIMATION_ATTACK_2;
-            attackFrames = &activeAttack2Frames();
+            attackFrames = m_currentAttackMelee ? &activeMelee2Frames() : &activeAttack2Frames();
         }
-        m_nextGroundAttackIsFirst = !m_nextGroundAttackIsFirst;
+        if (!m_currentAttackMelee) m_nextGroundAttackIsFirst = !m_nextGroundAttackIsFirst;
     }
 
     if (attackFrames->empty()) return;
@@ -410,8 +468,7 @@ FL_CPP_WEAK void FL_Player::startAttack() {
     m_attackCooldownRemaining = FL_PlayerDetail::attackCooldown();
     changeAnimation(attackState);
 
-    FL_PlayLayer* playLayer = static_cast<FL_PlayLayer*>(getParent());
-    if (playLayer) {
+    if (playLayer && !m_currentAttackMelee) {
         playLayer->spawnAttackProjectile(
             getPosition(),
             m_facingRight,
@@ -419,6 +476,19 @@ FL_CPP_WEAK void FL_Player::startAttack() {
             m_attackStance
         );
     }
+}
+
+FL_CPP_WEAK void FL_Player::startMeleeComboStage(int stage) {
+	m_currentAttackMelee = true;
+	m_meleeComboStage = std::max(1, std::min(3, stage));
+	m_attacking = true;
+	m_attackFacingRight = m_facingRight;
+	m_attackStance = m_stance;
+	m_attackStrikeArmed = true;
+	m_attackStrikeReady = false;
+	m_attackStrikeDelayRemaining = m_grounded ? 0.13f : 0.06f;
+	m_attackCooldownRemaining = 0.0f;
+	changeAnimation(m_grounded ? ANIMATION_ATTACK_1 : ANIMATION_ATTACK_AIR);
 }
 
 FL_CPP_WEAK void FL_Player::startRoll(int direction) {
@@ -589,7 +659,10 @@ FL_CPP_WEAK void FL_Player::step(float dt) {
     }
 
     if (m_attackQueued) {
-        if (!m_attacking && !m_hurtAnimating && !m_rolling && !m_rollRecovering &&
+        if (m_attacking && m_currentAttackMelee && m_meleeComboStage > 0 && m_meleeComboStage < 3) {
+			m_meleeAttackQueued = true;
+		}
+		else if (!m_attacking && !m_hurtAnimating && !m_rolling && !m_rollRecovering &&
             m_attackCooldownRemaining <= 0.0f) {
             startAttack();
         }
@@ -611,6 +684,7 @@ FL_CPP_WEAK void FL_Player::step(float dt) {
     if (m_jumpQueued && m_grounded && !m_rolling && !m_rollRecovering) {
         m_velocity.y = m_jumpVelocity;
         m_grounded = false;
+        m_dynamicGrounded = false;
     }
     m_jumpQueued = false;
 
@@ -633,6 +707,9 @@ FL_CPP_WEAK void FL_Player::step(float dt) {
     }
     updateFacing();
     updateAnimation(frameTime);
+	// Dynamic support must be reported again by the platform on the next frame.
+	// The post-physics contact pass does that after step() returns.
+	m_dynamicGrounded = false;
 }
 
 FL_CPP_WEAK void FL_Player::simulateSubstep(float dt) {
@@ -642,14 +719,16 @@ FL_CPP_WEAK void FL_Player::simulateSubstep(float dt) {
     const float acceleration = m_rolling
         ? FL_PlayerDetail::rollSpeed() * 12.0f
         : (m_grounded ? m_groundAcceleration : m_airAcceleration);
-    if (m_hurtControlLockRemaining <= 0.0f) {
+    if (m_hurtControlLockRemaining <= 0.0f && !m_propelled) {
         m_velocity.x = approach(m_velocity.x, targetHorizontalVelocity, acceleration * dt);
     }
     if (m_rolling) {
         m_velocity.y = 0.0f;
     }
     else {
-        m_velocity.y += m_gravity * dt;
+        // This port renders/authorizes the player body at half the original
+        // visual scale, so the original propelled trajectory is spatially 0.5x.
+        m_velocity.y += (m_propelled ? -540.f : m_gravity) * dt;
     }
 
     const CCPoint oldPosition = getPosition();
@@ -709,10 +788,23 @@ FL_CPP_WEAK void FL_Player::simulateSubstep(float dt) {
         }
     }
     else {
-        m_grounded = collisionResult.grounded;
+        m_grounded = collisionResult.grounded || (m_dynamicGrounded && m_velocity.y <= 0.0f);
+        if (m_dynamicGrounded && m_velocity.y <= 0.0f) m_velocity.y = 0.0f;
     }
 
     setPosition(newPosition);
+    if (m_propelHorizontalFade) {
+        m_velocity.x *= std::pow(.95f, dt * 60.f);
+        // Original fadeVelocity ends below 1.5 source units (90 px/s).
+        // Stop damping at the original 1.5-unit threshold, but retain that
+        // residual velocity. Otherwise the final part of an angled launch
+        // abruptly turns vertical instead of continuing along its inertia.
+        if (std::fabs(m_velocity.x) < 90.f) {
+            m_velocity.x = m_velocity.x < 0.f ? -90.f : 90.f;
+            m_propelHorizontalFade = false;
+        }
+    }
+    if (m_grounded) { m_propelled = false; m_propelHorizontalFade = false; }
 }
 
 FL_CPP_WEAK float FL_Player::approach(
@@ -756,6 +848,9 @@ FL_CPP_WEAK void FL_Player::resetToSpawn() {
     m_rollOutRemaining = 0.0f;
     m_stanceCooldownRemaining = 0.0f;
     m_nextGroundAttackIsFirst = false;
+	m_currentAttackMelee = false;
+	m_meleeAttackQueued = false;
+	m_meleeComboStage = 0;
     m_hurtAnimating = false;
     m_hurtControlLockRemaining = 0.0f;
     m_grounded = m_collisionWorld.snapToGround(
@@ -774,6 +869,22 @@ FL_CPP_WEAK void FL_Player::setCheckpoint(const CCPoint& position) {
 
 FL_CPP_WEAK void FL_Player::respawn() {
     resetToSpawn();
+}
+
+FL_CPP_WEAK void FL_Player::teleportTo(const CCPoint& position) {
+    // A teleport starts a fresh physics frame.  Carrying a platform contact or
+    // a bouncy/push velocity through the portal makes the destination drift or
+    // immediately enter the wrong airborne state.
+    setPosition(position);
+    m_velocity = CCPointZero;
+    m_grounded = false;
+    m_dynamicGrounded = false;
+    m_pushing = false;
+    m_pulling = false;
+    m_propelled = false;
+    m_propelHorizontalFade = false;
+    m_jumpQueued = false;
+    m_rollQueued = false;
 }
 
 FL_CPP_WEAK void FL_Player::updateFacing() {
@@ -815,6 +926,22 @@ FL_CPP_WEAK const std::vector<CCSpriteFrame*>& FL_Player::activeAttackAirFrames(
     return (m_stance == FL_PLAYER_STANCE_FIRE && !m_fireAttackAirFrames.empty()) ? m_fireAttackAirFrames : m_attackAirFrames;
 }
 
+FL_CPP_WEAK const std::vector<CCSpriteFrame*>& FL_Player::activeMelee1Frames() const {
+    return (m_stance == FL_PLAYER_STANCE_FIRE && !m_fireMelee1Frames.empty()) ? m_fireMelee1Frames : m_melee1Frames;
+}
+
+FL_CPP_WEAK const std::vector<CCSpriteFrame*>& FL_Player::activeMelee2Frames() const {
+    return (m_stance == FL_PLAYER_STANCE_FIRE && !m_fireMelee2Frames.empty()) ? m_fireMelee2Frames : m_melee2Frames;
+}
+
+FL_CPP_WEAK const std::vector<CCSpriteFrame*>& FL_Player::activeMelee3Frames() const {
+    return (m_stance == FL_PLAYER_STANCE_FIRE && !m_fireMelee3Frames.empty()) ? m_fireMelee3Frames : m_melee3Frames;
+}
+
+FL_CPP_WEAK const std::vector<CCSpriteFrame*>& FL_Player::activeMeleeAirFrames() const {
+    return (m_stance == FL_PLAYER_STANCE_FIRE && !m_fireMeleeAirFrames.empty()) ? m_fireMeleeAirFrames : m_meleeAirFrames;
+}
+
 FL_CPP_WEAK const std::vector<CCSpriteFrame*>& FL_Player::activeToRollFrames() const {
     return (m_stance == FL_PLAYER_STANCE_FIRE && !m_fireToRollFrames.empty()) ? m_fireToRollFrames : m_toRollFrames;
 }
@@ -848,9 +975,14 @@ FL_CPP_WEAK CCSpriteFrame* FL_Player::activeJumpFallFrame() const {
 }
 
 FL_CPP_WEAK const std::vector<CCSpriteFrame*>* FL_Player::attackFramesForState() const {
+    if (m_currentAttackMelee && m_animationState != ANIMATION_ATTACK_AIR) {
+		if (m_meleeComboStage >= 3) return &activeMelee3Frames();
+		if (m_meleeComboStage == 2) return &activeMelee2Frames();
+		return &activeMelee1Frames();
+	}
     if (m_animationState == ANIMATION_ATTACK_1) return &activeAttack1Frames();
     if (m_animationState == ANIMATION_ATTACK_2) return &activeAttack2Frames();
-    if (m_animationState == ANIMATION_ATTACK_AIR) return &activeAttackAirFrames();
+    if (m_animationState == ANIMATION_ATTACK_AIR) return m_currentAttackMelee ? &activeMeleeAirFrames() : &activeAttackAirFrames();
     return NULL;
 }
 
@@ -891,9 +1023,10 @@ FL_CPP_WEAK void FL_Player::refreshCurrentAnimationFrame() {
     CCSpriteFrame* frame = NULL;
     if (m_animationState == ANIMATION_IDLE && !activeIdleFrames().empty()) frame = activeIdleFrames()[std::min<unsigned int>(m_animationFrame, activeIdleFrames().size() - 1)];
     else if (m_animationState == ANIMATION_RUN && !activeRunFrames().empty()) frame = activeRunFrames()[std::min<unsigned int>(m_animationFrame, activeRunFrames().size() - 1)];
-    else if (m_animationState == ANIMATION_ATTACK_1 && !activeAttack1Frames().empty()) frame = activeAttack1Frames()[std::min<unsigned int>(m_animationFrame, activeAttack1Frames().size() - 1)];
-    else if (m_animationState == ANIMATION_ATTACK_2 && !activeAttack2Frames().empty()) frame = activeAttack2Frames()[std::min<unsigned int>(m_animationFrame, activeAttack2Frames().size() - 1)];
-    else if (m_animationState == ANIMATION_ATTACK_AIR && !activeAttackAirFrames().empty()) frame = activeAttackAirFrames()[std::min<unsigned int>(m_animationFrame, activeAttackAirFrames().size() - 1)];
+    else if (m_animationState == ANIMATION_ATTACK_1 || m_animationState == ANIMATION_ATTACK_2 || m_animationState == ANIMATION_ATTACK_AIR) {
+        const std::vector<CCSpriteFrame*>* attack = attackFramesForState();
+        if (attack && !attack->empty()) frame = (*attack)[std::min<unsigned int>(m_animationFrame, attack->size() - 1)];
+    }
     else if (m_animationState == ANIMATION_ROLL_IN && !activeToRollFrames().empty()) frame = activeToRollFrames()[std::min<unsigned int>(m_animationFrame, activeToRollFrames().size() - 1)];
     else if (m_animationState == ANIMATION_ROLL && activeRollFrame()) frame = activeRollFrame();
     else if (m_animationState == ANIMATION_ROLL_OUT && !activeFromRollFrames().empty()) frame = activeFromRollFrames()[std::min<unsigned int>(m_animationFrame, activeFromRollFrames().size() - 1)];
@@ -902,6 +1035,14 @@ FL_CPP_WEAK void FL_Player::refreshCurrentAnimationFrame() {
     else if (m_animationState == ANIMATION_JUMP_UP) frame = activeJumpUpFrame();
     else if (m_animationState == ANIMATION_JUMP_MIDDLE) frame = activeJumpMiddleFrame();
     else if (m_animationState == ANIMATION_JUMP_FALL) frame = activeJumpFallFrame();
+    else if (m_animationState == ANIMATION_PUSH) {
+        const std::vector<CCSpriteFrame*>& push = m_stance == FL_PLAYER_STANCE_FIRE ? m_firePushFrames : m_pushFrames;
+        if (!push.empty()) frame = push[std::min<unsigned int>(m_animationFrame, push.size() - 1)];
+    }
+    else if (m_animationState == ANIMATION_PULL) {
+        const std::vector<CCSpriteFrame*>& pull = m_stance == FL_PLAYER_STANCE_FIRE ? m_firePullFrames : m_pullFrames;
+        if (!pull.empty()) frame = pull[std::min<unsigned int>(m_animationFrame, pull.size() - 1)];
+    }
 
     if (frame) m_sprite->setDisplayFrame(frame);
 }
@@ -917,9 +1058,10 @@ FL_CPP_WEAK void FL_Player::changeAnimation(AnimationState state) {
     CCSpriteFrame* frame = NULL;
     if (state == ANIMATION_IDLE && !activeIdleFrames().empty()) frame = activeIdleFrames().front();
     else if (state == ANIMATION_RUN && !activeRunFrames().empty()) frame = activeRunFrames().front();
-    else if (state == ANIMATION_ATTACK_1 && !activeAttack1Frames().empty()) frame = activeAttack1Frames().front();
-    else if (state == ANIMATION_ATTACK_2 && !activeAttack2Frames().empty()) frame = activeAttack2Frames().front();
-    else if (state == ANIMATION_ATTACK_AIR && !activeAttackAirFrames().empty()) frame = activeAttackAirFrames().front();
+    else if (state == ANIMATION_ATTACK_1 || state == ANIMATION_ATTACK_2 || state == ANIMATION_ATTACK_AIR) {
+        const std::vector<CCSpriteFrame*>* attack = attackFramesForState();
+        if (attack && !attack->empty()) frame = attack->front();
+    }
     else if (state == ANIMATION_ROLL_IN && !activeToRollFrames().empty()) frame = activeToRollFrames().front();
     else if (state == ANIMATION_ROLL && activeRollFrame()) frame = activeRollFrame();
     else if (state == ANIMATION_ROLL_OUT && !activeFromRollFrames().empty()) frame = activeFromRollFrames().front();
@@ -928,6 +1070,14 @@ FL_CPP_WEAK void FL_Player::changeAnimation(AnimationState state) {
     else if (state == ANIMATION_JUMP_UP) frame = activeJumpUpFrame();
     else if (state == ANIMATION_JUMP_MIDDLE) frame = activeJumpMiddleFrame();
     else if (state == ANIMATION_JUMP_FALL) frame = activeJumpFallFrame();
+    else if (state == ANIMATION_PUSH) {
+        const std::vector<CCSpriteFrame*>& push = m_stance == FL_PLAYER_STANCE_FIRE ? m_firePushFrames : m_pushFrames;
+        if (!push.empty()) frame = push.front();
+    }
+    else if (state == ANIMATION_PULL) {
+        const std::vector<CCSpriteFrame*>& pull = m_stance == FL_PLAYER_STANCE_FIRE ? m_firePullFrames : m_pullFrames;
+        if (!pull.empty()) frame = pull.front();
+    }
 
     if (frame && m_sprite) m_sprite->setDisplayFrame(frame);
 }
@@ -1011,14 +1161,23 @@ FL_CPP_WEAK void FL_Player::updateAnimation(float dt) {
         }
         else {
             m_animationElapsed += dt;
-            while (m_animationElapsed >= FL_PlayerDetail::attackFrameDelay()) {
-                m_animationElapsed -= FL_PlayerDetail::attackFrameDelay();
+            const float frameDelay = m_currentAttackMelee ? 0.042f : FL_PlayerDetail::attackFrameDelay();
+            while (m_animationElapsed >= frameDelay) {
+                m_animationElapsed -= frameDelay;
                 if (m_animationFrame + 1 < attackFrames->size()) {
                     ++m_animationFrame;
                     m_sprite->setDisplayFrame((*attackFrames)[m_animationFrame]);
                 }
                 else {
-                    m_attacking = false;
+					if (m_currentAttackMelee && m_meleeAttackQueued && m_meleeComboStage < 3 && m_grounded) {
+						m_meleeAttackQueued = false;
+						startMeleeComboStage(m_meleeComboStage + 1);
+					}
+					else {
+						m_attacking = false;
+						m_meleeAttackQueued = false;
+						m_meleeComboStage = 0;
+					}
                     break;
                 }
             }
@@ -1032,6 +1191,8 @@ FL_CPP_WEAK void FL_Player::updateAnimation(float dt) {
         else if (m_velocity.y < -80.0f) desiredState = ANIMATION_JUMP_FALL;
         else desiredState = ANIMATION_JUMP_MIDDLE;
     }
+    else if (m_pulling) desiredState = ANIMATION_PULL;
+    else if (m_pushing) desiredState = ANIMATION_PUSH;
     else if (std::fabs(m_velocity.x) > 12.0f) {
         desiredState = ANIMATION_RUN;
     }
@@ -1047,6 +1208,14 @@ FL_CPP_WEAK void FL_Player::updateAnimation(float dt) {
     else if (m_animationState == ANIMATION_RUN) {
         frames = &activeRunFrames();
         frameDelay = FL_PlayerDetail::runFrameDelay();
+    }
+    else if (m_animationState == ANIMATION_PUSH) {
+        frames = &(m_stance == FL_PLAYER_STANCE_FIRE ? m_firePushFrames : m_pushFrames);
+        frameDelay = 0.09f;
+    }
+    else if (m_animationState == ANIMATION_PULL) {
+        frames = &(m_stance == FL_PLAYER_STANCE_FIRE ? m_firePullFrames : m_pullFrames);
+        frameDelay = 0.09f;
     }
 
     if (!frames || frames->size() <= 1 || !m_sprite) return;
@@ -1145,20 +1314,55 @@ FL_CPP_WEAK CCRect FL_Player::getCollisionBounds() {
     );
 }
 
-void FL_Player::rideMovingPlatform(const CCPoint& delta, float platformTop) {
+void FL_Player::rideMovingBlock(const CCPoint& delta, float platformTop) {
     CCPoint position = ccpAdd(getPosition(), delta);
     position.y = platformTop + m_bodyHalfHeight;
     setPosition(position);
     m_velocity.y = 0.0f;
     m_grounded = true;
+    m_dynamicGrounded = true;
 }
 
-void FL_Player::landOnMovingPlatform(float platformTop) {
+void FL_Player::landOnMovingBlock(float platformTop) {
     CCPoint position = getPosition();
     position.y = platformTop + m_bodyHalfHeight;
     setPosition(position);
     m_velocity.y = 0.0f;
     m_grounded = true;
+    m_dynamicGrounded = true;
+}
+
+void FL_Player::setPushing(bool pushing) {
+    m_pushing = pushing;
+}
+
+void FL_Player::setPulling(bool pulling, bool faceRight) {
+    m_pulling = pulling;
+    m_pullFacingRight = faceRight;
+    if (pulling) {
+		// In the original attack-button handler, grabbing a pullable object is
+		// selected instead of starting the melee attack.
+		m_attacking = false;
+		m_attackStrikeArmed = false;
+		m_attackStrikeReady = false;
+        m_facingRight = faceRight;
+        if (m_sprite) m_sprite->setFlipX(!faceRight);
+    }
+}
+
+void FL_Player::propel(float sourceBounceX, float sourceBounceY) {
+    // Authored velocity is pixels per normalized tick; timeValue is exactly 60.
+    // Preserve the full authored horizontal impulse; vertical world distance is
+    // half-scale in this port (Frost/Fire playerVisualScale == .5).
+    m_velocity.x = sourceBounceX * 60.f;
+    m_velocity.y = sourceBounceY * 30.f;
+    m_propelled = true;
+    m_propelHorizontalFade = sourceBounceX != 0.f;
+    setPositionY(getPositionY() + 8.f);
+    m_grounded = false;
+    m_dynamicGrounded = false;
+    m_pushing = false;
+    m_pulling = false;
 }
 
 bool FL_Player::isGrounded() const {

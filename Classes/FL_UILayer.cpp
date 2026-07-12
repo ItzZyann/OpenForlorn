@@ -513,6 +513,11 @@ void FL_UILayer::setPauseVisible(bool visible) {
     refreshUIButton();
 }
 
+void FL_UILayer::togglePauseFromKeyboard() {
+    setPauseVisible(!m_pausedVisual);
+    if (m_delegate) m_delegate->uiMenuPressed();
+}
+
 void FL_UILayer::setPauseTab(int tab) {
     if (tab < 1 || tab > 3) return;
     m_activePauseTab = tab;

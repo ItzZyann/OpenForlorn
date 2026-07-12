@@ -11,7 +11,7 @@ class FL_Player;
 
 namespace FLTriggers {
 
-class MovingPlatformController {
+class MovingBlockRegistry {
 public:
     struct Checkpoint {
         CCPoint offset;
@@ -24,6 +24,7 @@ public:
 
     struct Definition {
         std::string group;
+        std::string connectionID;
         std::string actionType;
         std::string texture;
         std::vector<Checkpoint> checkpoints;
@@ -34,23 +35,23 @@ public:
         Definition():actionType("repeat"),disabled(false),spawnedByTrigger(false),invisible(false),moving(false){}
     };
 
-    MovingPlatformController();
-    ~MovingPlatformController();
+    MovingBlockRegistry();
+    ~MovingBlockRegistry();
     static Definition parse(const flrapidjson::Value& json);
     void add(CCNode* node, const Definition& definition);
-    void addDecoration(CCNode* node, const std::string& group);
-    void addDecorationCandidate(CCNode* node, const std::string& group, const std::string& objectType, const std::string& texture);
+    void addDecorationCandidate(CCNode* node, const std::string& lockedTo);
     void resolveDecorations();
     void activateGroup(const std::string& group);
     void deactivateGroup(const std::string& group);
     void update(float dt, FL_Player* player);
     bool ownsNode(CCNode* node) const;
+    bool intersectsActive(const CCRect& bounds) const;
 
 private:
     struct Runtime;
     std::vector<Runtime> platforms_;
     std::map<std::string, std::vector<unsigned int> > groups_;
-    struct DecorationCandidate { CCNode* node; std::string group; std::string type; std::string texture; };
+    struct DecorationCandidate { CCNode* node; std::string lockedTo; };
     std::vector<DecorationCandidate> decorationCandidates_;
 };
 

@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+class FL_UILayer;
+
 class FL_PlayLayer : public CCLayer, public FL_UILayerDelegate, public FL_TriggerHost {
 public:
     struct Args {
@@ -59,8 +61,13 @@ public:
     virtual void onExit();
     virtual void update(float dt);
 
+    void setUILayer(FL_UILayer* uiLayer);
+
     void attachFixedBackground(CCNode* parent, int zOrder);
     void spawnAttackProjectile(const CCPoint& playerPosition, bool facingRight, bool airborne, FL_PlayerStanceType stance);
+    bool hasMeleeTarget(const CCRect& attackBounds) const;
+    bool findMeleeTarget(const CCPoint& playerPosition, bool currentFacingRight, bool& targetFacingRight) const;
+    bool performMeleeStrike(const CCRect& attackBounds, bool facingRight, FL_PlayerStanceType stance, int damage);
 
     virtual void triggerCamera(const CCPoint& offset, bool hasOffset, float zoomTarget,
         bool hasZoom, bool lockCamera, const CCPoint& lockPosition, bool hasLockPosition,

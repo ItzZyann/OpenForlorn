@@ -14,7 +14,12 @@
 #include "FL_CollisionWorld.h"
 #include "JsonUtils.h"
 #include "Triggers/FL_TriggerSystem.h"
-#include "Triggers/MovingPlatform.h"
+#include "Triggers/MovingBlock.h"
+#include "Triggers/MovableBlock.h"
+#include "Triggers/RollingBlock.h"
+#include "Triggers/ShakyBlock.h"
+#include "Triggers/BlockBouncy.h"
+#include "Triggers/MeleeTrigger.h"
 
 #include "rapidjson/document.h"
 #include "rapidjson/error/error.h"
@@ -48,16 +53,32 @@ namespace {
 	struct LevelObject {
 		std::string id;
 		std::string groupID;
+		std::string lockedTo;
 		std::string objectType;
+		std::string switchGroupID;
+		std::string combination;
+		std::string passGroupID;
+		std::string failGroupID;
+		CCSize interactionSize;
+		int health;
 		FL_Block::Data data;
 		std::vector<CCPoint> collisionPoints;
 		bool passable;
 		bool blocksMovement;
-		FLTriggers::MovingPlatformController::Definition movingPlatform;
+		float blockSpeed;
+		float shakyDelay;
+		float bounceX;
+		float bounceY;
+		FLTriggers::MovingBlockRegistry::Definition movingBlock;
 
 		LevelObject()
 			: passable(false)
-			, blocksMovement(false) {
+			, blocksMovement(false)
+			, blockSpeed(0.0f)
+			, shakyDelay(0.0f)
+			, interactionSize(CCSizeZero) {
+			health = 0;
+			bounceX = bounceY = 0.0f;
 		}
 	};
 
@@ -205,11 +226,21 @@ namespace {
 	struct RuntimeNode {
 		CCNode* node;
 		std::string groupID;
+		std::string objectType;
+		std::string switchGroupID;
+		std::vector<std::string> combination;
+		std::string passGroupID;
+		std::string failGroupID;
+		CCRect authoredInteractionBounds;
+		unsigned int combinationIndex;
+		int health;
+		bool attackReactive;
 		CCRect bounds;
 		bool active;
 		bool visible;
 		bool pauseActions;
 		bool trackNodeBounds;
+		bool switchActivated;
 		float boundsPadding;
 		int warmupFrames;
 		int entityIndex;
@@ -220,11 +251,23 @@ namespace {
 			, visible(true)
 			, pauseActions(false)
 			, trackNodeBounds(false)
+			, switchActivated(false)
+			, combinationIndex(0)
+			, health(0)
+			, attackReactive(false)
 			, boundsPadding(0.0f)
 			, warmupFrames(0)
 			, entityIndex(-1) {
 		}
 	};
+
+	CCRect meleeRuntimeBounds(const RuntimeNode& runtime) {
+		if (runtime.authoredInteractionBounds.size.width > 0.0f &&
+			runtime.authoredInteractionBounds.size.height > 0.0f) {
+			return runtime.authoredInteractionBounds;
+		}
+		return FLTriggers::MeleeTrigger::interactionBounds(runtime.node);
+	}
 
 	std::string toLower(const std::string& value) {
 		std::string result = value;
@@ -375,7 +418,15 @@ namespace {
 
 		output.id = id;
 		output.groupID = jsonScalarString(json, "groupID");
+		output.lockedTo = jsonScalarString(json, "lockedTo");
 		output.objectType = jsonString(json, "type", background ? "background" : "block");
+		output.switchGroupID = jsonScalarString(json, "switchGroupID");
+		output.combination = jsonScalarString(json, "combination");
+		output.passGroupID = jsonScalarString(json, "passGroupID");
+		output.failGroupID = jsonScalarString(json, "failGroupID");
+		const CCPoint interactionSize = jsonPoint(json, "size", CCPointZero);
+		output.interactionSize = CCSizeMake(std::fabs(interactionSize.x), std::fabs(interactionSize.y));
+		output.health = std::max(0, jsonInt(json, "health", 0));
 		FL_Block::Data& data = output.data;
 		data.spriteSheet = spriteSheet;
 		data.texture = texture;
@@ -413,7 +464,11 @@ namespace {
 		data.darken = jsonBool(json, "darken", false);
 		output.passable = jsonBool(json, "passable", false);
 		output.blocksMovement = objectTypeUsesSpriteCollision(output.objectType);
-		output.movingPlatform = FLTriggers::MovingPlatformController::parse(json);
+		output.blockSpeed = jsonNumber(json, "bSpeed", 0.0f);
+		output.shakyDelay = jsonNumber(json, "delay", 0.0f);
+		output.bounceX = jsonNumber(json, "bounceX", 0.0f);
+		output.bounceY = jsonNumber(json, "bounceY", 0.0f);
+		output.movingBlock = FLTriggers::MovingBlockRegistry::parse(json);
 
 		if (json.HasMember("points") && json["points"].IsObject()) {
 			std::vector<std::pair<int, CCPoint> > orderedPoints;
@@ -1015,23 +1070,29 @@ namespace {
 
 	float rollDoubleTapWindow() { return 0.36f; }
 
-	void readGameplayKeys(bool& left, bool& right, bool& jump) {
+	void readGameplayKeys(bool& left, bool& right, bool& jump, bool& attack, bool& pause) {
 #if (CC_TARGET_PLATFORM == CC_PLATFORM_WIN32)
 		left = ((GetAsyncKeyState(VK_LEFT) & 0x8000) != 0) || ((GetAsyncKeyState('A') & 0x8000) != 0);
 		right = ((GetAsyncKeyState(VK_RIGHT) & 0x8000) != 0) || ((GetAsyncKeyState('D') & 0x8000) != 0);
 		jump = (GetAsyncKeyState(VK_SPACE) & 0x8000) != 0;
+		attack = (GetAsyncKeyState('E') & 0x8000) != 0;
+		pause = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
 #elif (CC_TARGET_PLATFORM == CC_PLATFORM_LINUX)
 		left = glfwGetKey(GLFW_KEY_LEFT) == GLFW_PRESS || glfwGetKey(GLFW_KEY_A) == GLFW_PRESS;
 		right = glfwGetKey(GLFW_KEY_RIGHT) == GLFW_PRESS || glfwGetKey(GLFW_KEY_D) == GLFW_PRESS;
 		jump = glfwGetKey(GLFW_KEY_SPACE) == GLFW_PRESS;
+		attack = glfwGetKey(GLFW_KEY_E) == GLFW_PRESS;
+		pause = glfwGetKey(GLFW_KEY_ESC) == GLFW_PRESS;
 #elif (CC_TARGET_PLATFORM == CC_PLATFORM_MAC)
 		left = CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, 123) ||
 			CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, 0);
 		right = CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, 124) ||
 			CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, 2);
 		jump = CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, 49);
+		attack = CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, 14);
+		pause = CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, 53);
 #else
-		left = right = jump = false;
+		left = right = jump = attack = pause = false;
 #endif
 	}
 
@@ -1092,12 +1153,15 @@ struct FL_PlayLayer::Members {
 	bool jumpInputWasDown;
 	bool keyboardLeftWasDown;
 	bool keyboardRightWasDown;
+	bool keyboardAttackWasDown;
+	bool keyboardPauseWasDown;
 	float inputTime;
 	float lastDirectionalTapTime;
 	int lastDirectionalTap;
 	bool pausedByUI;
 	bool soundEnabled;
 	FL_Player* player;
+	FL_UILayer* uiLayer;
 
 	CCPoint lastTouchPos;
 	bool isDragging;
@@ -1108,10 +1172,12 @@ struct FL_PlayLayer::Members {
 
 	std::set<std::string> loadedAtlases;
 	std::vector<RuntimeNode> runtimeNodes;
+	std::vector<MovableBlock*> movableBlocks;
+	std::vector<BlockBouncy*> bouncyBlocks;
 	std::vector<EntityRuntime> entities;
 	std::vector<ActiveProjectile> activeProjectiles;
 	FL_CollisionWorld collisionWorld;
-	FLTriggers::MovingPlatformController movingPlatforms;
+	FLTriggers::MovingBlockRegistry movingBlocks;
 	std::map<std::string, std::shared_ptr<EntityDescriptor> > entityDescriptors;
 
 	Members()
@@ -1145,12 +1211,15 @@ struct FL_PlayLayer::Members {
 		, jumpInputWasDown(false)
 		, keyboardLeftWasDown(false)
 		, keyboardRightWasDown(false)
+		, keyboardAttackWasDown(false)
+		, keyboardPauseWasDown(false)
 		, inputTime(0.0f)
 		, lastDirectionalTapTime(-10.0f)
 		, lastDirectionalTap(0)
 		, pausedByUI(false)
 		, soundEnabled(true)
 		, player(NULL)
+		, uiLayer(NULL)
 		, lastTouchPos(CCPointZero)
 		, isDragging(false)
 		, cullingTimer(0.0f)
@@ -1298,6 +1367,7 @@ CCScene* FL_PlayLayer::scene(const Args& args) {
 
 	if (!scene || !playLayer || !uiLayer) return NULL;
 	uiLayer->setDelegate(playLayer);
+	playLayer->setUILayer(uiLayer);
 	scene->addChild(playLayer, 0);
 	playLayer->attachFixedBackground(scene, -1000000);
 	scene->addChild(uiLayer, 10000000);
@@ -1312,6 +1382,10 @@ FL_PlayLayer* FL_PlayLayer::create(const Args& args) {
 	}
 	delete result;
 	return NULL;
+}
+
+void FL_PlayLayer::setUILayer(FL_UILayer* uiLayer) {
+	m->uiLayer = uiLayer;
 }
 
 FL_PlayLayer::FL_PlayLayer() : m(new Members()) {
@@ -1391,19 +1465,9 @@ bool FL_PlayLayer::init(const Args& args) {
 		for (std::vector<LevelObject>::const_iterator it = objects.begin(); it != objects.end(); ++it) {
 			const LevelObject& object = *it;
 			if (toLower(object.objectType) == "particle" || object.data.spriteSheet == "particle") {
-				if (!object.data.texture.empty() && object.data.texture != "NULL" &&
-					endsWithIgnoreCase(object.data.texture, ".plist") && fileExists(object.data.texture)) {
-					CCParticleSystemQuad* particle = CCParticleSystemQuad::create(object.data.texture.c_str());
-					if (particle) {
-						particle->setPosition(object.data.position);
-						particle->setScaleX(object.data.scale.x * (object.data.flippedX ? -1.0f : 1.0f));
-						particle->setScaleY(object.data.scale.y * (object.data.flippedY ? -1.0f : 1.0f));
-						if (object.data.hasRotation) particle->setRotation(object.data.rotation);
-						addChild(particle, getZValueForType(object.data.sheetType) * 10000 + object.data.zValue);
-						m->movingPlatforms.addDecorationCandidate(
-							particle, object.groupID, object.objectType, object.data.texture);
-					}
-				}
+				// Level particle entries are editor descriptors, not necessarily valid
+				// CCParticleSystem plist files. Passing them to create() asserts inside
+				// cocos2d-x before it can return NULL (the reported menu crash).
 				continue;
 			}
 			if (
@@ -1414,7 +1478,13 @@ bool FL_PlayLayer::init(const Args& args) {
 				continue;
 			}
 
-			FL_Block* block = FL_Block::create(object.data);
+			const std::string blockType = toLower(object.objectType);
+			FL_Block* block = NULL;
+			if (blockType == "movable") block = MovableBlock::create(object.data);
+			else if (blockType == "rolling") block = RollingBlock::create(object.data, object.blockSpeed);
+			else if (blockType == "shaky") block = ShakyBlock::create(object.data, object.shakyDelay);
+			else if (blockType == "bouncy") block = BlockBouncy::create(object.data, object.bounceX, object.bounceY);
+			else block = FL_Block::create(object.data);
 			if (!block) {
 				CCLog("Object %s skipped: frame %s is unresolved.", object.id.c_str(), object.data.texture.c_str());
 				continue;
@@ -1422,8 +1492,13 @@ bool FL_PlayLayer::init(const Args& args) {
 
 			const int baseZ = getZValueForType(object.data.sheetType) * 10000;
 			addChild(block, baseZ + object.data.zValue);
+			if (MovableBlock* movable = dynamic_cast<MovableBlock*>(block)) {
+				m->movableBlocks.push_back(movable);
+			}
+			if (BlockBouncy* bouncy = dynamic_cast<BlockBouncy*>(block)) m->bouncyBlocks.push_back(bouncy);
 
-			if (containerIndex == 1 && !object.movingPlatform.moving && object.collisionPoints.empty() &&
+			if (containerIndex == 1 && !object.movingBlock.moving && blockType != "movable" &&
+				blockType != "rolling" && blockType != "bouncy" && object.collisionPoints.empty() &&
 				(object.passable || object.blocksMovement)) {
 				// `solid` and related block types do not carry a points dictionary.
 				// Their collision is the fully transformed sprite rectangle. A
@@ -1438,6 +1513,36 @@ bool FL_PlayLayer::init(const Args& args) {
 			RuntimeNode runtime;
 			runtime.node = block;
 			runtime.groupID = object.groupID;
+			runtime.objectType = toLower(object.objectType);
+			runtime.switchGroupID = object.switchGroupID;
+			runtime.passGroupID = object.passGroupID;
+			runtime.failGroupID = object.failGroupID;
+			runtime.health = object.health;
+			runtime.attackReactive = runtime.objectType == "switch" ||
+				runtime.objectType == "blockcombinationlock" ||
+				runtime.objectType == "destructable";
+			if (object.interactionSize.width > 0.0f && object.interactionSize.height > 0.0f) {
+				runtime.authoredInteractionBounds = CCRect(
+					object.data.position.x - object.interactionSize.width * 0.5f,
+					object.data.position.y - object.interactionSize.height * 0.5f,
+					object.interactionSize.width,
+					object.interactionSize.height);
+			}
+			else if (runtime.attackReactive) {
+				// collisionRegProj uses logical control bounds even when the plist
+				// object has no explicit size. Do not derive gameplay reach from a
+				// tightly trimmed HD sprite frame (notably pots 2090/2091).
+				runtime.authoredInteractionBounds = CCRect(
+					object.data.position.x - 50.0f,
+					object.data.position.y - 49.0f,
+					100.0f,
+					98.0f);
+			}
+			if (!object.combination.empty()) {
+				std::istringstream combinationStream(object.combination);
+				std::string token;
+				while (combinationStream >> token) runtime.combination.push_back(toLower(token));
+			}
 			// Sprite frames in one animation may have different trim offsets and
 			// dimensions. The culling rectangle therefore follows the current
 			// transformed sprite bounds instead of being frozen on frame zero.
@@ -1448,15 +1553,15 @@ bool FL_PlayLayer::init(const Args& args) {
 			runtime.pauseActions = object.data.animated || !object.data.customAnim.empty();
 			runtime.trackNodeBounds = true;
 			m->runtimeNodes.push_back(runtime);
-			if (containerIndex == 1 && object.movingPlatform.moving) {
-				m->movingPlatforms.add(block, object.movingPlatform);
+			if (containerIndex == 1 && object.movingBlock.moving) {
+				m->movingBlocks.add(block, object.movingBlock);
 			}
 			else {
-				m->movingPlatforms.addDecorationCandidate(block, object.groupID, object.objectType, object.data.texture);
+				m->movingBlocks.addDecorationCandidate(block, object.lockedTo);
 			}
 		}
 	}
-	m->movingPlatforms.resolveDecorations();
+	m->movingBlocks.resolveDecorations();
 
 	if (!m->previewMode) {
 		// All level geometry is authored against the normal atlas dimensions.
@@ -1610,7 +1715,7 @@ void FL_PlayLayer::triggerCameraMove(const std::vector<CCPoint>& points,
 }
 
 void FL_PlayLayer::triggerTeleport(const CCPoint& target, bool) {
-	if (m->player) m->player->setPosition(target);
+	if (m->player) m->player->teleportTo(target);
 	m->cameraPos = target;
 	m->snapCameraPosition = true;
 }
@@ -1643,7 +1748,7 @@ void FL_PlayLayer::triggerReleaseCamera() {
 }
 
 void FL_PlayLayer::triggerCommand(const std::string& type, const std::string& value,
-	const std::string&, const CCPoint&, float amount, bool enabled, bool alternate) {
+	const std::string& secondary, const CCPoint& point, float amount, bool enabled, bool alternate) {
 	if (type == "triggereventsafespot") {
 		if (m->player) m->player->setCheckpoint(m->player->getPosition());
 	}
@@ -1656,7 +1761,7 @@ void FL_PlayLayer::triggerCommand(const std::string& type, const std::string& va
 		}
 	}
 	else if (type == "spawntrigger") {
-		m->movingPlatforms.activateGroup(value);
+		m->movingBlocks.activateGroup(value);
 		for (std::vector<RuntimeNode>::iterator it = m->runtimeNodes.begin(); it != m->runtimeNodes.end(); ++it) {
 			if (it->groupID != value) continue;
 			it->active = true; it->visible = true;
@@ -1664,8 +1769,13 @@ void FL_PlayLayer::triggerCommand(const std::string& type, const std::string& va
 		}
 	}
 	else if (type == "triggermovabledespawner") {
-		// Despawners affect movable objects currently touching their region; those
-		// objects are represented by runtime nodes and become inactive when culled.
+		const float height = static_cast<float>(std::atof(secondary.c_str()));
+		const CCRect region(point.x - amount * .5f, point.y - height * .5f, amount, height);
+		for (std::vector<MovableBlock*>::iterator it = m->movableBlocks.begin();
+			it != m->movableBlocks.end(); ++it) {
+			MovableBlock* block = *it;
+			if (block && region.intersectsRect(block->boundingBox())) block->resetObject();
+		}
 	}
 	else if (type == "triggereventsound") {
 		if (alternate && enabled && value != "0" && !value.empty())
@@ -1770,6 +1880,131 @@ void FL_PlayLayer::spawnAttackProjectile(
 	m->activeProjectiles.push_back(projectile);
 }
 
+bool FL_PlayLayer::hasMeleeTarget(const CCRect& attackBounds) const {
+	if (!m || m->previewMode) return false;
+	for (std::vector<EntityRuntime>::const_iterator entity=m->entities.begin();entity!=m->entities.end();++entity) {
+		if (!entity->defeated && entity->active && entity->visible && entity->root &&
+			attackBounds.intersectsRect(entityBounds(*entity))) return true;
+	}
+	for (std::vector<RuntimeNode>::const_iterator runtime=m->runtimeNodes.begin();runtime!=m->runtimeNodes.end();++runtime) {
+		if (runtime->objectType == "switch" && !runtime->switchActivated &&
+			FLTriggers::MeleeTrigger::intersects(attackBounds, runtime->node)) return true;
+		if (runtime->objectType == "blockcombinationlock" && !runtime->switchActivated && runtime->node &&
+			runtime->combinationIndex < runtime->combination.size() &&
+			FLTriggers::MeleeTrigger::requiresSword(runtime->combination[runtime->combinationIndex]) &&
+			attackBounds.intersectsRect(meleeRuntimeBounds(*runtime))) return true;
+	}
+	return false;
+}
+
+bool FL_PlayLayer::findMeleeTarget(const CCPoint& playerPosition, bool currentFacingRight,
+	bool& targetFacingRight) const {
+	if (!m || m->previewMode) return false;
+	float bestDistance = 1000000.0f;
+	bool found = false;
+	auto consider = [&](const CCRect& bounds) {
+		const float dx = bounds.getMidX() - playerPosition.x;
+		const float dy = bounds.getMidY() - playerPosition.y;
+		// The original getControlRect(1/2) is 100 points long; include half
+		// the target width so trimmed collisionRegProj sprites remain hittable.
+		const float horizontalReach = 100.0f + bounds.size.width * 0.5f;
+		const float verticalReach = 64.0f + bounds.size.height * 0.5f;
+		if (std::fabs(dx) > horizontalReach || std::fabs(dy) > verticalReach) return;
+		const float distance = std::fabs(dx) + std::fabs(dy) * 0.35f;
+		if (distance < bestDistance) {
+			bestDistance = distance;
+			targetFacingRight = std::fabs(dx) < 1.0f ? currentFacingRight : dx > 0.0f;
+			found = true;
+		}
+	};
+	for (std::vector<EntityRuntime>::const_iterator entity=m->entities.begin();entity!=m->entities.end();++entity)
+		if (!entity->defeated && entity->active && entity->root) consider(entityBounds(*entity));
+	for (std::vector<RuntimeNode>::const_iterator runtime=m->runtimeNodes.begin();runtime!=m->runtimeNodes.end();++runtime) {
+		if (!runtime->node || runtime->switchActivated) continue;
+		if (runtime->objectType == "switch") consider(FLTriggers::MeleeTrigger::interactionBounds(runtime->node));
+		else if (runtime->objectType == "blockcombinationlock" &&
+			runtime->combinationIndex < runtime->combination.size() &&
+			FLTriggers::MeleeTrigger::requiresSword(runtime->combination[runtime->combinationIndex]))
+			consider(meleeRuntimeBounds(*runtime));
+		else if (runtime->attackReactive && runtime->objectType == "destructable")
+			consider(meleeRuntimeBounds(*runtime));
+	}
+	return found;
+}
+
+bool FL_PlayLayer::performMeleeStrike(const CCRect& attackBounds, bool facingRight,
+	FL_PlayerStanceType stance, int damage) {
+	if (!m || m->previewMode) return false;
+	bool hit=false;
+	for (std::vector<EntityRuntime>::iterator entity=m->entities.begin();entity!=m->entities.end();++entity) {
+		if (entity->defeated || !entity->active || !entity->visible || !entity->root ||
+			!attackBounds.intersectsRect(entityBounds(*entity))) continue;
+		entity->health -= std::max(1, damage);
+		FL_PlayerParticles::spawnAttackImpact(this, entity->root->getPosition(), facingRight, stance);
+		if (entity->health <= 0) {
+			entity->defeated=true; entity->active=false; entity->visible=false;
+			entity->root->stopAllActions(); entity->root->setVisible(false);
+		}
+		hit=true;
+	}
+	for (std::vector<RuntimeNode>::iterator runtime=m->runtimeNodes.begin();runtime!=m->runtimeNodes.end();++runtime) {
+		if (runtime->objectType != "switch" || runtime->switchActivated || !runtime->node ||
+			!FLTriggers::MeleeTrigger::intersects(attackBounds, runtime->node)) continue;
+		runtime->switchActivated=true;
+		CCSprite* sprite=dynamic_cast<CCSprite*>(runtime->node);
+		CCSpriteFrame* onFrame=CCSpriteFrameCache::sharedSpriteFrameCache()->spriteFrameByName("sn_frostlevel_switch_on.png");
+		if (sprite && onFrame) sprite->setDisplayFrame(onFrame);
+		if (!runtime->switchGroupID.empty() && runtime->switchGroupID != "0") {
+			m->movingBlocks.activateGroup(runtime->switchGroupID);
+			if (m->triggers) m->triggers->activateGroup(runtime->switchGroupID, FLTriggers::GroupActivate, true, false, *this);
+		}
+		FL_PlayerParticles::spawnAttackImpact(this, runtime->node->getPosition(), facingRight, stance);
+		hit=true;
+	}
+	for (std::vector<RuntimeNode>::iterator runtime=m->runtimeNodes.begin();runtime!=m->runtimeNodes.end();++runtime) {
+		if (runtime->objectType != "blockcombinationlock" || runtime->switchActivated || !runtime->node ||
+			runtime->combination.empty() || !attackBounds.intersectsRect(meleeRuntimeBounds(*runtime))) continue;
+		const std::string attackCode = FLTriggers::MeleeTrigger::swordCode(stance);
+		const std::string expected = runtime->combination[runtime->combinationIndex];
+		FL_PlayerParticles::spawnAttackImpact(this, runtime->node->getPosition(), facingRight, stance);
+		if (expected == attackCode) {
+			++runtime->combinationIndex;
+			if (runtime->combinationIndex >= runtime->combination.size()) {
+				runtime->switchActivated = true;
+				if (!runtime->passGroupID.empty() && runtime->passGroupID != "0") {
+					m->movingBlocks.activateGroup(runtime->passGroupID);
+					if (m->triggers) m->triggers->activateGroup(runtime->passGroupID, FLTriggers::GroupActivate, true, false, *this);
+				}
+				runtime->node->setVisible(false);
+				runtime->visible = false;
+			}
+		}
+		else {
+			runtime->combinationIndex = 0;
+			if (!runtime->failGroupID.empty() && runtime->failGroupID != "0" && m->triggers)
+				m->triggers->activateGroup(runtime->failGroupID, FLTriggers::GroupActivate, true, false, *this);
+		}
+		hit = true;
+	}
+	for (std::vector<RuntimeNode>::iterator runtime=m->runtimeNodes.begin();runtime!=m->runtimeNodes.end();++runtime) {
+		if (!runtime->attackReactive || runtime->objectType != "destructable" || !runtime->node ||
+			runtime->health <= 0 || !FLTriggers::MeleeTrigger::intersects(attackBounds, runtime->node)) continue;
+		runtime->health -= std::max(1, damage);
+		FL_PlayerParticles::spawnAttackImpact(this, runtime->node->getPosition(), facingRight, stance);
+		if (runtime->health <= 0) {
+			runtime->node->setVisible(false);
+			runtime->visible = false;
+			runtime->active = false;
+			if (!runtime->switchGroupID.empty() && runtime->switchGroupID != "0") {
+				m->movingBlocks.activateGroup(runtime->switchGroupID);
+				if (m->triggers) m->triggers->activateGroup(runtime->switchGroupID, FLTriggers::GroupActivate, true, false, *this);
+			}
+		}
+		hit = true;
+	}
+	return hit;
+}
+
 void FL_PlayLayer::onEnter() {
 	CCLayer::onEnter();
 	// Register only after the node belongs to a running scene. This keeps the
@@ -1792,7 +2027,25 @@ void FL_PlayLayer::update(float dt) {
 		bool keyboardLeft = false;
 		bool keyboardRight = false;
 		bool keyboardJump = false;
-		readGameplayKeys(keyboardLeft, keyboardRight, keyboardJump);
+		bool keyboardAttack = false;
+		bool keyboardPause = false;
+		readGameplayKeys(keyboardLeft, keyboardRight, keyboardJump, keyboardAttack, keyboardPause);
+		if (keyboardPause && !m->keyboardPauseWasDown) {
+			m->keyboardPauseWasDown = true;
+			if (m->uiLayer) m->uiLayer->togglePauseFromKeyboard();
+			else uiMenuPressed();
+			return;
+		}
+		m->keyboardPauseWasDown = keyboardPause;
+		if (m->pausedByUI) {
+			m->keyboardAttackWasDown = keyboardAttack;
+			m->keyboardLeftWasDown = keyboardLeft;
+			m->keyboardRightWasDown = keyboardRight;
+			m->player->setMoveInput(0.0f);
+			return;
+		}
+		if (keyboardAttack && !m->keyboardAttackWasDown) m->player->requestAttack();
+		m->keyboardAttackWasDown = keyboardAttack;
 		if (keyboardLeft && !m->keyboardLeftWasDown) {
 			if (m->lastDirectionalTap == -1 &&
 				m->inputTime - m->lastDirectionalTapTime <= rollDoubleTapWindow()) {
@@ -1820,64 +2073,129 @@ void FL_PlayLayer::update(float dt) {
 		const bool jumpInputDown = m->up || keyboardJump;
 		if (jumpInputDown && !m->jumpInputWasDown) m->player->requestJump();
 		m->jumpInputWasDown = jumpInputDown;
+		// The platform moves first so rideMovingBlock preserves grounded state
+		// before jump input is consumed by FL_Player::step(). A zero-time contact
+		// pass afterwards keeps the player supported without cancelling a jump.
+		m->movingBlocks.update(safeDt, m->player);
+		for (std::vector<MovableBlock*>::iterator block = m->movableBlocks.begin();
+			block != m->movableBlocks.end(); ++block) {
+			if (*block) (*block)->updateMovable(safeDt, m->collisionWorld);
+		}
+		auto applyMovableSupport = [&](bool carryWithBlock) {
+			const CCRect playerBounds = m->player->getCollisionBounds();
+			const float foot = playerBounds.getMinY();
+			for (std::vector<MovableBlock*>::iterator it = m->movableBlocks.begin();
+				it != m->movableBlocks.end(); ++it) {
+				MovableBlock* block = *it;if (!block || !block->active()) continue;
+				const CCRect bounds = block->boundingBox();
+				const bool overlapX = playerBounds.getMaxX() > bounds.getMinX() + 2.f &&
+					playerBounds.getMinX() < bounds.getMaxX() - 2.f;
+				if (overlapX && m->player->getVelocity().y <= 0.f &&
+					foot >= bounds.getMaxY() - 18.f && foot <= bounds.getMaxY() + 10.f) {
+					m->player->rideMovingBlock(carryWithBlock ? block->lastDelta() : CCPointZero,
+						bounds.getMaxY());
+					return;
+				}
+			}
+		};
+		applyMovableSupport(true);
+		const CCRect playerBoundsBeforeStep = m->player->getCollisionBounds();
 		m->player->step(dt);
-		m->movingPlatforms.update(safeDt, m->player);
+		for (std::vector<BlockBouncy*>::iterator it=m->bouncyBlocks.begin();it!=m->bouncyBlocks.end();++it) {
+			BlockBouncy* bouncy=*it;if(!bouncy)continue;bouncy->updateBouncy(safeDt);if(!bouncy->canBounce())continue;
+			const CCRect playerBounds=m->player->getCollisionBounds();const CCRect bounds=bouncy->boundingBox();
+			const bool overlapX=playerBounds.getMaxX()>bounds.getMinX()+3.f&&playerBounds.getMinX()<bounds.getMaxX()-3.f;
+			const float oldFoot=playerBoundsBeforeStep.getMinY(),foot=playerBounds.getMinY(),top=bounds.getMaxY();
+			// Original collisionReact returns 4 only when the actor crosses the top
+			// face. BlockBouncy then immediately propels it; it is not inserted as a
+			// permanent solid platform in the static collision world.
+			if(overlapX&&m->player->getVelocity().y<=0.f&&oldFoot>=top-4.f&&foot<=top+4.f){
+				m->player->landOnMovingBlock(top);m->player->propel(bouncy->bounceX(),bouncy->bounceY());bouncy->playBounceAnimation();break;
+			}
+		}
+
+		bool pushing = false;
+		bool pulling = false;
+		bool pullFacingRight = m->player->isFacingRight();
+		if (std::fabs(moveInput) > .01f && m->player->isGrounded()) {
+			CCRect playerBounds = m->player->getCollisionBounds();
+			for (std::vector<MovableBlock*>::iterator it = m->movableBlocks.begin();
+				it != m->movableBlocks.end(); ++it) {
+				MovableBlock* block = *it;if (!block || !block->active()) continue;
+				const CCRect bounds = block->boundingBox();
+				const bool vertical = playerBounds.getMaxY() > bounds.getMinY() + 4.f &&
+					playerBounds.getMinY() < bounds.getMaxY() - 4.f;
+				if (!vertical) continue;
+				const bool blockOnRight = bounds.getMidX() >= playerBounds.getMidX();
+				const float gap = blockOnRight ? bounds.getMinX() - playerBounds.getMaxX()
+					: playerBounds.getMinX() - bounds.getMaxX();
+				if (gap < -14.f || gap > 12.f) continue;
+				const float distance = moveInput * 78.f * safeDt;
+				const bool movingToward = (blockOnRight && moveInput > 0) || (!blockOnRight && moveInput < 0);
+				const bool movingAway = !movingToward;
+				if ((movingToward || (m->down && movingAway)) &&
+					block->pushHorizontal(distance, m->collisionWorld, m->movableBlocks)) {
+					CCPoint position = m->player->getPosition();
+					position.x = blockOnRight
+						? block->boundingBox().getMinX() - playerBounds.size.width * .5f
+						: block->boundingBox().getMaxX() + playerBounds.size.width * .5f;
+					m->player->setPosition(position);
+					if (m->down && movingAway) { pulling = true; pullFacingRight = blockOnRight; }
+					else pushing = true;
+					break;
+				}
+				// Solid side response even when the box cannot be moved (wall or
+				// another movable): the player may not pass through it.
+				if (playerBounds.intersectsRect(bounds)) {
+					CCPoint position = m->player->getPosition();
+					position.x = blockOnRight ? bounds.getMinX() - playerBounds.size.width*.5f
+						: bounds.getMaxX() + playerBounds.size.width*.5f;
+					m->player->setPosition(position);
+				}
+			}
+		}
+		if (!pulling && m->down && m->player->isGrounded()) {
+			const CCRect playerBounds = m->player->getCollisionBounds();
+			for (std::vector<MovableBlock*>::iterator it=m->movableBlocks.begin();it!=m->movableBlocks.end();++it) {
+				MovableBlock* block=*it;if(!block||!block->active())continue;const CCRect b=block->boundingBox();
+				const bool vertical=playerBounds.getMaxY()>b.getMinY()+4.f&&playerBounds.getMinY()<b.getMaxY()-4.f;
+				const bool right=b.getMidX()>=playerBounds.getMidX();
+				const float gap=right?b.getMinX()-playerBounds.getMaxX():playerBounds.getMinX()-b.getMaxX();
+				if(vertical&&gap>=-14.f&&gap<=12.f){pulling=true;pullFacingRight=right;break;}
+			}
+		}
+		// Dynamic boxes are not part of the immutable level collision world, so
+		// resolve their side faces explicitly for every state, including airborne
+		// movement and a box that is currently blocked from being pushed.
+		for (std::vector<MovableBlock*>::iterator it = m->movableBlocks.begin();
+			it != m->movableBlocks.end(); ++it) {
+			MovableBlock* block = *it;if (!block || !block->active()) continue;
+			const CCRect bounds = block->boundingBox();
+			const CCRect playerBounds = m->player->getCollisionBounds();
+			if (!playerBounds.intersectsRect(bounds)) continue;
+			const float fromLeft = playerBounds.getMaxX() - bounds.getMinX();
+			const float fromRight = bounds.getMaxX() - playerBounds.getMinX();
+			const float fromTop = playerBounds.getMaxY() - bounds.getMinY();
+			const float fromBottom = bounds.getMaxY() - playerBounds.getMinY();
+			const float horizontal = std::min(fromLeft, fromRight);
+			const float vertical = std::min(fromTop, fromBottom);
+			if (horizontal >= vertical) continue;
+			CCPoint position = m->player->getPosition();
+			position.x = fromLeft < fromRight
+				? bounds.getMinX() - playerBounds.size.width*.5f
+				: bounds.getMaxX() + playerBounds.size.width*.5f;
+			m->player->setPosition(position);
+		}
+		m->player->setPushing(pushing);
+		m->player->setPulling(pulling, pullFacingRight);
+		applyMovableSupport(false);
+		m->movingBlocks.update(0.f, m->player);
 
 		CCRect attackBounds;
 		if (m->player->consumeAttackStrike(attackBounds)) {
-			const int damage = std::max(1, m->player->getAttackDamage());
-			for (std::vector<EntityRuntime>::iterator entity = m->entities.begin();
-				entity != m->entities.end(); ++entity) {
-				if (entity->defeated || !entity->active || !entity->visible ||
-					!entity->root || !entity->descriptor) {
-					continue;
-				}
-				const CCRect bounds = entityBounds(*entity);
-				if (!rectsIntersect(attackBounds, bounds)) continue;
-
-				entity->health -= damage;
-				FL_PlayerParticles::spawnAttackImpact(
-					this,
-					entity->root->getPosition(),
-					m->player->getAttackFacingRight(),
-					m->player->getAttackStance()
-				);
-				FL_ProjectileBreakParticles::spawnProjectileBreak(
-					this,
-					entity->root->getPosition(),
-					m->player->getAttackFacingRight(),
-					m->player->getAttackStance(),
-					0.0f
-				);
-
-				// The visible projectile must disappear when the attack connects.
-				// Otherwise it keeps flying and may produce a second delayed break.
-				for (std::vector<ActiveProjectile>::iterator projectile = m->activeProjectiles.begin();
-					projectile != m->activeProjectiles.end(); ++projectile) {
-					if (!projectile->active) continue;
-					if (projectile->facingRight != m->player->getAttackFacingRight()) continue;
-					if (projectile->stance != m->player->getAttackStance()) continue;
-					projectile->active = false;
-					if (projectile->root) projectile->root->removeFromParentAndCleanup(true);
-				}
-
-				if (entity->health <= 0) {
-					entity->defeated = true;
-					entity->active = false;
-					entity->visible = false;
-					entity->root->stopAllActions();
-					entity->root->setVisible(false);
-
-					const int entityIndex = static_cast<int>(entity - m->entities.begin());
-					for (std::vector<RuntimeNode>::iterator runtime = m->runtimeNodes.begin();
-						runtime != m->runtimeNodes.end(); ++runtime) {
-						if (runtime->entityIndex == entityIndex) {
-							runtime->active = false;
-							runtime->visible = false;
-							runtime->warmupFrames = 0;
-						}
-					}
-				}
+			if (m->player->isMeleeAttacking()) {
+				performMeleeStrike(attackBounds, m->player->getAttackFacingRight(),
+					m->player->getAttackStance(), m->player->getAttackDamage());
 			}
 		}
 
@@ -1931,6 +2249,31 @@ void FL_PlayLayer::update(float dt) {
 
 				projectile->position = resolvedPosition;
 				if (projectile->root) projectile->root->setPosition(projectile->position);
+
+				const CCRect projectileBounds(
+					resolvedPosition.x - projectile->halfWidth,
+					resolvedPosition.y - projectile->halfHeight,
+					projectile->halfWidth * 2.f,
+					projectile->halfHeight * 2.f);
+				if (!hitWorld && m->movingBlocks.intersectsActive(projectileBounds)) hitWorld = true;
+				if (!hitWorld) {
+					for (std::vector<MovableBlock*>::iterator block=m->movableBlocks.begin();block!=m->movableBlocks.end();++block) {
+						if (*block && (*block)->active() && projectileBounds.intersectsRect((*block)->boundingBox())) { hitWorld=true; break; }
+					}
+				}
+				if (!hitWorld) {
+					for (std::vector<EntityRuntime>::iterator entity=m->entities.begin();entity!=m->entities.end();++entity) {
+						if (entity->defeated || !entity->active || !entity->visible || !entity->root || !entity->descriptor) continue;
+						if (!projectileBounds.intersectsRect(entityBounds(*entity))) continue;
+						entity->health -= std::max(1, m->player->getAttackDamage());
+						FL_PlayerParticles::spawnAttackImpact(this,resolvedPosition,projectile->facingRight,projectile->stance);
+						FL_ProjectileBreakParticles::spawnProjectileBreak(this,resolvedPosition,projectile->facingRight,projectile->stance,0.f);
+						if (entity->health <= 0) { entity->defeated=true;entity->active=false;entity->visible=false;entity->root->stopAllActions();entity->root->setVisible(false); }
+						projectile->active=false;
+						if(projectile->root)projectile->root->removeFromParentAndCleanup(true);
+						break;
+					}
+				}
 
 				projectile->lifetimeRemaining -= stepDt;
 				if (projectile->lifetimeRemaining <= 0.0f) hitWorld = true;
@@ -2122,7 +2465,16 @@ void FL_PlayLayer::uiUpPressed() { m->up = true; }
 void FL_PlayLayer::uiUpReleased() { m->up = false; }
 void FL_PlayLayer::uiDownPressed() {
 	m->down = true;
-	if (m->player) m->player->requestAttack();
+	if (!m->player) return;
+	const CCRect playerBounds=m->player->getCollisionBounds();
+	for(std::vector<MovableBlock*>::iterator it=m->movableBlocks.begin();it!=m->movableBlocks.end();++it){
+		MovableBlock*block=*it;if(!block||!block->active())continue;const CCRect b=block->boundingBox();
+		const bool vertical=playerBounds.getMaxY()>b.getMinY()+4.f&&playerBounds.getMinY()<b.getMaxY()-4.f;
+		const bool right=b.getMidX()>=playerBounds.getMidX();
+		const float gap=right?b.getMinX()-playerBounds.getMaxX():playerBounds.getMinX()-b.getMaxX();
+		if(vertical&&gap>=-14.f&&gap<=12.f&&m->player->isGrounded()){m->player->setPulling(true,right);return;}
+	}
+	m->player->requestAttack();
 }
 void FL_PlayLayer::uiDownReleased() { m->down = false; }
 void FL_PlayLayer::uiLeftPressed() {
@@ -2155,10 +2507,10 @@ void FL_PlayLayer::uiMenuPressed() {
 	m->jumpInputWasDown = false;
 	m->keyboardLeftWasDown = false;
 	m->keyboardRightWasDown = false;
+	m->keyboardAttackWasDown = false;
 	if (m->player) m->player->setMoveInput(0.0f);
 
 	if (m->pausedByUI) {
-		pauseSchedulerAndActions();
 		if (m->player) m->player->pauseSchedulerAndActions();
 		for (std::vector<RuntimeNode>::iterator runtime = m->runtimeNodes.begin();
 			runtime != m->runtimeNodes.end(); ++runtime) {
@@ -2166,7 +2518,6 @@ void FL_PlayLayer::uiMenuPressed() {
 		}
 	}
 	else {
-		resumeSchedulerAndActions();
 		if (m->player) m->player->resumeSchedulerAndActions();
 		for (std::vector<RuntimeNode>::iterator runtime = m->runtimeNodes.begin();
 			runtime != m->runtimeNodes.end(); ++runtime) {

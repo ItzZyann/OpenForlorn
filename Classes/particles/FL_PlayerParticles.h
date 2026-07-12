@@ -98,7 +98,7 @@ inline void FL_PlayerParticles::ensureParticleFramesLoaded() {
     static bool loaded = false;
     if (loaded) return;
     CCSpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile("particleImgSheet.plist");
-    CCSpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile("Effects_spritesheet_01.plist");
+    CCSpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile("Effects_spritesheet_01-hd.plist");
     loaded = true;
 }
 
@@ -236,10 +236,10 @@ inline CCParticleSystemQuad* FL_PlayerParticles::createFromPlist(
 
     particle->setAngle(dictionaryFloat(dictionary, "angle", 0.0f));
     particle->setAngleVar(dictionaryFloat(dictionary, "angleVariance", 0.0f));
-    particle->setStartSize(dictionaryFloat(dictionary, "startParticleSize", 8.0f));
-    particle->setStartSizeVar(dictionaryFloat(dictionary, "startParticleSizeVariance", 0.0f));
-    particle->setEndSize(dictionaryFloat(dictionary, "finishParticleSize", 0.0f));
-    particle->setEndSizeVar(dictionaryFloat(dictionary, "finishParticleSizeVariance", 0.0f));
+    particle->setStartSize(dictionaryFloat(dictionary, "startParticleSize", 8.0f)*2.f);
+    particle->setStartSizeVar(dictionaryFloat(dictionary, "startParticleSizeVariance", 0.0f)*2.f);
+    particle->setEndSize(dictionaryFloat(dictionary, "finishParticleSize", 0.0f)*2.f);
+    particle->setEndSizeVar(dictionaryFloat(dictionary, "finishParticleSizeVariance", 0.0f)*2.f);
     particle->setPosVar(ccp(
         dictionaryFloat(dictionary, "sourcePositionVariancex", 0.0f),
         dictionaryFloat(dictionary, "sourcePositionVariancey", 0.0f)
