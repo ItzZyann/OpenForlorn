@@ -40,8 +40,8 @@ public:
 
     static inline const char* characterAtlas(FL_PlayerStanceType stance) {
         return stance == FL_PLAYER_STANCE_FIRE
-            ? "Fire_Main_Character_spritesheet_01.plist"
-            : "Frost_Main_Character_spritesheet_01.plist";
+            ? "Fire_Main_Character_spritesheet_01-hd.plist"
+            : "Frost_Main_Character_spritesheet_01-hd.plist";
     }
 
     static inline const char* projectileBase(FL_PlayerStanceType stance) {

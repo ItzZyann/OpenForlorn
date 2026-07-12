@@ -14,6 +14,7 @@
 #include "FL_CollisionWorld.h"
 #include "JsonUtils.h"
 #include "Triggers/FL_TriggerSystem.h"
+#include "Triggers/MovingPlatform.h"
 
 #include "rapidjson/document.h"
 #include "rapidjson/error/error.h"
@@ -52,6 +53,7 @@ namespace {
 		std::vector<CCPoint> collisionPoints;
 		bool passable;
 		bool blocksMovement;
+		FLTriggers::MovingPlatformController::Definition movingPlatform;
 
 		LevelObject()
 			: passable(false)
@@ -266,19 +268,8 @@ namespace {
 		return exists;
 	}
 
-	bool isHDSheetName(const std::string& sheetName) {
-		static const char* const noHD[] = {
-			"ForestSheet_MG",
-			"lightSheet",
-			"FrostLevel_MGSheet",
-			"FlameVillageMG",
-			"particleImgSheet"
-		};
-
-		for (unsigned int index = 0; index < sizeof(noHD) / sizeof(noHD[0]); ++index) {
-			if (sheetName == noHD[index]) return false;
-		}
-		return true;
+	bool hasHDAtlas(const std::string& sheetName) {
+		return fileExists(sheetName + "-hd.plist");
 	}
 
 	float jsonNumber(const flrapidjson::Value& value, float fallback) {
@@ -422,6 +413,7 @@ namespace {
 		data.darken = jsonBool(json, "darken", false);
 		output.passable = jsonBool(json, "passable", false);
 		output.blocksMovement = objectTypeUsesSpriteCollision(output.objectType);
+		output.movingPlatform = FLTriggers::MovingPlatformController::parse(json);
 
 		if (json.HasMember("points") && json["points"].IsObject()) {
 			std::vector<std::pair<int, CCPoint> > orderedPoints;
@@ -651,7 +643,7 @@ namespace {
 		if (loadedAtlases.find(sheetName) != loadedAtlases.end()) return true;
 
 		std::vector<std::string> candidates;
-		if (isHDSheetName(sheetName)) candidates.push_back(sheetName + "-hd.plist");
+		candidates.push_back(sheetName + "-hd.plist");
 		candidates.push_back(sheetName + ".plist");
 
 		for (std::vector<std::string>::const_iterator it = candidates.begin(); it != candidates.end(); ++it) {
@@ -790,7 +782,7 @@ namespace {
 		std::shared_ptr<EntityDescriptor> descriptor(new EntityDescriptor());
 		descriptor->npcType = npcType;
 		descriptor->sheetName = dictionaryString(definition, "spriteSheet");
-		descriptor->displayScale = isHDSheetName(descriptor->sheetName) ? 0.5f : 1.0f;
+		descriptor->displayScale = hasHDAtlas(descriptor->sheetName) ? 0.5f : 1.0f;
 		descriptor->boundsSize = CCSizeMake(
 			std::max(32.0f, dictionaryFloat(definition, "width", 128.0f)),
 			std::max(32.0f, dictionaryFloat(definition, "height", 128.0f))
@@ -1119,6 +1111,7 @@ struct FL_PlayLayer::Members {
 	std::vector<EntityRuntime> entities;
 	std::vector<ActiveProjectile> activeProjectiles;
 	FL_CollisionWorld collisionWorld;
+	FLTriggers::MovingPlatformController movingPlatforms;
 	std::map<std::string, std::shared_ptr<EntityDescriptor> > entityDescriptors;
 
 	Members()
@@ -1379,7 +1372,10 @@ bool FL_PlayLayer::init(const Args& args) {
 	}
 
 	if (!level.backgroundImage.empty()) {
-		const std::string imageFile = level.backgroundImage + ".png";
+		const std::string hdImageFile = level.backgroundImage + "-hd.png";
+		const std::string imageFile = fileExists(hdImageFile)
+			? hdImageFile
+			: level.backgroundImage + ".png";
 		if (fileExists(imageFile)) {
 			m->fixedBackground = CCSprite::create(imageFile.c_str());
 			if (m->fixedBackground) {
@@ -1394,8 +1390,23 @@ bool FL_PlayLayer::init(const Args& args) {
 		const std::vector<LevelObject>& objects = *containers[containerIndex];
 		for (std::vector<LevelObject>::const_iterator it = objects.begin(); it != objects.end(); ++it) {
 			const LevelObject& object = *it;
-			if (toLower(object.objectType) == "particle" ||
-				object.data.spriteSheet == "particle" ||
+			if (toLower(object.objectType) == "particle" || object.data.spriteSheet == "particle") {
+				if (!object.data.texture.empty() && object.data.texture != "NULL" &&
+					endsWithIgnoreCase(object.data.texture, ".plist") && fileExists(object.data.texture)) {
+					CCParticleSystemQuad* particle = CCParticleSystemQuad::create(object.data.texture.c_str());
+					if (particle) {
+						particle->setPosition(object.data.position);
+						particle->setScaleX(object.data.scale.x * (object.data.flippedX ? -1.0f : 1.0f));
+						particle->setScaleY(object.data.scale.y * (object.data.flippedY ? -1.0f : 1.0f));
+						if (object.data.hasRotation) particle->setRotation(object.data.rotation);
+						addChild(particle, getZValueForType(object.data.sheetType) * 10000 + object.data.zValue);
+						m->movingPlatforms.addDecorationCandidate(
+							particle, object.groupID, object.objectType, object.data.texture);
+					}
+				}
+				continue;
+			}
+			if (
 				object.data.texture.empty() ||
 				object.data.texture == "NULL" ||
 				object.data.texture == "BlockSectionReference.png" ||
@@ -1412,7 +1423,7 @@ bool FL_PlayLayer::init(const Args& args) {
 			const int baseZ = getZValueForType(object.data.sheetType) * 10000;
 			addChild(block, baseZ + object.data.zValue);
 
-			if (containerIndex == 1 && object.collisionPoints.empty() &&
+			if (containerIndex == 1 && !object.movingPlatform.moving && object.collisionPoints.empty() &&
 				(object.passable || object.blocksMovement)) {
 				// `solid` and related block types do not carry a points dictionary.
 				// Their collision is the fully transformed sprite rectangle. A
@@ -1437,20 +1448,23 @@ bool FL_PlayLayer::init(const Args& args) {
 			runtime.pauseActions = object.data.animated || !object.data.customAnim.empty();
 			runtime.trackNodeBounds = true;
 			m->runtimeNodes.push_back(runtime);
+			if (containerIndex == 1 && object.movingPlatform.moving) {
+				m->movingPlatforms.add(block, object.movingPlatform);
+			}
+			else {
+				m->movingPlatforms.addDecorationCandidate(block, object.groupID, object.objectType, object.data.texture);
+			}
 		}
 	}
+	m->movingPlatforms.resolveDecorations();
 
 	if (!m->previewMode) {
-		// Prefer the resolution-independent atlas name. Cocos2d-x will select an
-		// HD variant automatically when appropriate. Explicitly try the supplied
-		// -hd plist only when the normal atlas did not register the required frame.
+		// All level geometry is authored against the normal atlas dimensions.
+		// Loading the 2x plist here makes frames twice as large and the old 0.5
+		// compensation is not applied consistently to every sprite type.
 		CCSpriteFrameCache* playerFrames = CCSpriteFrameCache::sharedSpriteFrameCache();
 		if (!playerFrames->spriteFrameByName("Frost_Idle1_Anim_001.png")) {
-			if (fileExists("Frost_Main_Character_spritesheet_01.plist")) {
-				playerFrames->addSpriteFramesWithFile("Frost_Main_Character_spritesheet_01.plist");
-			}
-			if (!playerFrames->spriteFrameByName("Frost_Idle1_Anim_001.png") &&
-				fileExists("Frost_Main_Character_spritesheet_01-hd.plist")) {
+			if (fileExists("Frost_Main_Character_spritesheet_01-hd.plist")) {
 				playerFrames->addSpriteFramesWithFile("Frost_Main_Character_spritesheet_01-hd.plist");
 			}
 		}
@@ -1642,6 +1656,7 @@ void FL_PlayLayer::triggerCommand(const std::string& type, const std::string& va
 		}
 	}
 	else if (type == "spawntrigger") {
+		m->movingPlatforms.activateGroup(value);
 		for (std::vector<RuntimeNode>::iterator it = m->runtimeNodes.begin(); it != m->runtimeNodes.end(); ++it) {
 			if (it->groupID != value) continue;
 			it->active = true; it->visible = true;
@@ -1806,6 +1821,7 @@ void FL_PlayLayer::update(float dt) {
 		if (jumpInputDown && !m->jumpInputWasDown) m->player->requestJump();
 		m->jumpInputWasDown = jumpInputDown;
 		m->player->step(dt);
+		m->movingPlatforms.update(safeDt, m->player);
 
 		CCRect attackBounds;
 		if (m->player->consumeAttackStrike(attackBounds)) {

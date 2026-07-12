@@ -50,7 +50,6 @@ public:
 
 	static FL_Block* create(const Data& data);
 	bool init(const Data& data);
-	bool isSheetHD(const Data& data);
 
 	void runPulsingAnimationForever();
 	void runAnimationLooped(const Data& d);

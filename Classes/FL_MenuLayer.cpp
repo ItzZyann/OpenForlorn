@@ -28,9 +28,9 @@ bool FL_MenuLayer::init() {
 		cavePreview->attachFixedBackground(this, -2000000);
 	}
 
-	CCTextureCache::sharedTextureCache()->addImage("MenuSheet.png");
+	CCTextureCache::sharedTextureCache()->addImage("MenuSheet-hd.png");
 	CCSpriteFrameCache::sharedSpriteFrameCache()
-		->addSpriteFramesWithFile("MenuSheet.plist");
+		->addSpriteFramesWithFile("MenuSheet-hd.plist");
 
 	CCSprite* playSprite = CCSprite::createWithSpriteFrameName("play_btn.png");
 	playSprite->setScale(.8);
@@ -45,7 +45,7 @@ bool FL_MenuLayer::init() {
 	menu->setPosition(ccp(menuPos.x, menuPos.y - 80.0f));
 	addChild(menu, 1);
 
-	CCSprite* logo = CCSprite::create("forlorn_logo_menu.png");
+	CCSprite* logo = CCSprite::create("forlorn_logo_menu-hd.png");
 	logo->setScale(.8);
 	if (logo) {
 		CCRect tr = logo->getTextureRect();

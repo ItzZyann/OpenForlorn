@@ -18,6 +18,9 @@ bool AppDelegate::applicationDidFinishLaunching() {
 	#endif
 
 	pDirector->setOpenGLView(pEGLView);
+	// UI HD atlases intentionally use their full 2x logical dimensions.
+	// Gameplay applies its HD compensation at node level instead.
+	pDirector->setContentScaleFactor(1.0f);
 	pDirector->setDisplayStats(true);
 	pDirector->setAnimationInterval(1.0 / 60);
 

@@ -24,11 +24,11 @@ namespace {
     namespace FL_PlayerDetail {
 
         const char* playerAtlas() {
-            return "Frost_Main_Character_spritesheet_01.plist";
+            return "Frost_Main_Character_spritesheet_01-hd.plist";
         }
 
         const char* firePlayerAtlas() {
-            return "Fire_Main_Character_spritesheet_01.plist";
+            return "Fire_Main_Character_spritesheet_01-hd.plist";
         }
 
         float playerVisualScale() { return 0.5f; }
@@ -1143,6 +1143,22 @@ FL_CPP_WEAK CCRect FL_Player::getCollisionBounds() {
         m_bodyHalfWidth * 2.0f,
         m_bodyHalfHeight * 2.0f
     );
+}
+
+void FL_Player::rideMovingPlatform(const CCPoint& delta, float platformTop) {
+    CCPoint position = ccpAdd(getPosition(), delta);
+    position.y = platformTop + m_bodyHalfHeight;
+    setPosition(position);
+    m_velocity.y = 0.0f;
+    m_grounded = true;
+}
+
+void FL_Player::landOnMovingPlatform(float platformTop) {
+    CCPoint position = getPosition();
+    position.y = platformTop + m_bodyHalfHeight;
+    setPosition(position);
+    m_velocity.y = 0.0f;
+    m_grounded = true;
 }
 
 bool FL_Player::isGrounded() const {

@@ -99,7 +99,7 @@ bool FL_UILayer::init() {
 
     const CCSize winSize = CCDirector::sharedDirector()->getWinSize();
     CCSpriteFrameCache* cache = CCSpriteFrameCache::sharedSpriteFrameCache();
-    cache->addSpriteFramesWithFile("UISheet.plist");
+    cache->addSpriteFramesWithFile("UISheet-hd.plist");
 
     m_dpadIdleFrame = cache->spriteFrameByName("Dpad_Btn.png");
     m_dpadDwnFrame = cache->spriteFrameByName("Dpad_Btn_Dwn.png");

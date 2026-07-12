@@ -30,6 +30,8 @@ public:
     int getMaxHealth() const;
     bool isInvulnerable() const;
     CCRect getCollisionBounds();
+    void rideMovingPlatform(const CCPoint& delta, float platformTop);
+    void landOnMovingPlatform(float platformTop);
 
     bool isGrounded() const;
     CCPoint getVelocity() const;

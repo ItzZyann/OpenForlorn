@@ -36,10 +36,15 @@ bool FL_LevelScene::init() {
 
 	m_internalLayer = CCLayer::create();
 
-	CCSprite* worldMap = CCSprite::create("FL_Map_World.png");
+	CCSprite* worldMap = CCSprite::create("FL_Map_World-hd.png");
 	if (worldMap) {
+		// The map image is scene content, not UI: keep its authored 1x map size.
+		worldMap->setScale(0.5f);
 		m_internalLayer->addChild(worldMap);
-		m_internalLayer->setContentSize(worldMap->getContentSize());
+		m_internalLayer->setContentSize(CCSizeMake(
+			worldMap->getContentSize().width * 0.5f,
+			worldMap->getContentSize().height * 0.5f
+			));
 	}
 	else {
 		m_internalLayer->setContentSize(CCSizeZero);
@@ -52,9 +57,9 @@ bool FL_LevelScene::init() {
 	m_mapDefinitions->setPosition(CCPointZero);
 	m_internalLayer->addChild(m_mapDefinitions, 2);
 
-	CCSpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile("MenuSheet.plist");
+	CCSpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile("MenuSheet-hd.plist");
 
-	m_uiSheet = CCSpriteBatchNode::create("UISheet.png");
+	m_uiSheet = CCSpriteBatchNode::create("UISheet-hd.png");
 	m_internalLayer->addChild(m_uiSheet, 1);
 
 	std::string fullPath = CCFileUtils::sharedFileUtils()->fullPathForFilename("mapDefinitions.plist");

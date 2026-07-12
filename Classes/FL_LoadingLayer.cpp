@@ -25,7 +25,7 @@ void FL_LoadingLayer::preloadAssets() {
 	if (!m_preloadAssets) {
 		auto texture = CCTextureCache::sharedTextureCache();
 
-		texture->addImage("UISheet.png");
+		texture->addImage("UISheet-hd.png");
 		texture->addImage("ForestSheet_MG.png");
 		texture->addImage("lightSheet.png");
 		// texture->addImage("ForestLevel_MGSheet.png");
@@ -40,7 +40,7 @@ void FL_LoadingLayer::loadAssets() {
 	if (m_preloadAssets && !m_loadAssets) {
 		auto frame = CCSpriteFrameCache::sharedSpriteFrameCache();
 
-		frame->addSpriteFramesWithFile("UISheet.plist");
+		frame->addSpriteFramesWithFile("UISheet-hd.plist");
 		frame->addSpriteFramesWithFile("ForestSheet_MG.plist");
 		frame->addSpriteFramesWithFile("lightSheet.plist");
 		// frame->addSpriteFramesWithFile("ForestLevel_MGSheet.plist");

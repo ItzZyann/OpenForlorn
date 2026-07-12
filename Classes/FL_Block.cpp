@@ -20,21 +20,6 @@ FL_Block* FL_Block::create(const Data& data) {
 	return NULL;
 }
 
-bool FL_Block::isSheetHD(const Data& data) {
-	static const char* const noHD[] = {
-		"ForestSheet_MG",
-		"lightSheet",
-		"FrostLevel_MGSheet",
-		"FlameVillageMG",
-		"particleImgSheet"
-	};
-
-	for (unsigned int index = 0; index < sizeof(noHD) / sizeof(noHD[0]); ++index) {
-		if (data.spriteSheet == noHD[index]) return false;
-	}
-	return true;
-}
-
 bool FL_Block::init(const FL_Block::Data& data) {
 	if (!CCSprite::initWithSpriteFrameName(data.texture.c_str())) {
 		CCLog("Could not create block %s", data.texture.c_str());
@@ -44,7 +29,12 @@ bool FL_Block::init(const FL_Block::Data& data) {
 	setPosition(data.position);
 
 	CCPoint scale = data.scale;
-	if (isSheetHD(data)) scale = ccpMult(scale, 0.5f);
+	const std::string hdPlist = data.spriteSheet + "-hd.plist";
+	unsigned long hdSize = 0;
+	unsigned char* hdData = CCFileUtils::sharedFileUtils()->getFileData(hdPlist.c_str(), "rb", &hdSize);
+	const bool usesHDAtlas = hdData != NULL && hdSize > 0;
+	if (hdData) delete[] hdData;
+	if (usesHDAtlas) scale = ccpMult(scale, 0.5f);
 
 	setScaleX(scale.x * (data.flippedX ? -1.0f : 1.0f));
 	setScaleY(scale.y * (data.flippedY ? -1.0f : 1.0f));
