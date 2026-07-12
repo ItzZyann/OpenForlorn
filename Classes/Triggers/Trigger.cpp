@@ -1,7 +1,15 @@
+#if defined(_WIN32) || defined(_WIN64)
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#endif
+
 #include "Trigger.h"
 #include "FL_TriggerJson.h"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+
 namespace FLTriggers {
 Trigger::Trigger():bounds_(0,0,0,0),priority_(0),triggerDelay_(0),delayRemaining_(0),cooldownRemaining_(0),callOnlyOnce_(true),calledByEvent_(false),hasBeenExecuted_(false),sleeping_(false),defaultSleeping_(false),pending_(false),insideLastFrame_(false){}
 void Trigger::load(const std::string&id,const flrapidjson::Value&j){id_=id;groupID_=Json::scalar(j,"groupID");callGroupID_=Json::scalar(j,"spawnGroupID");triggeredSound_=Json::scalar(j,"triggeredSound");priority_=static_cast<int>(Json::number(j,"p_uID"));triggerDelay_=std::max(0.f,Json::number(j,"triggerDelay"));callOnlyOnce_=Json::boolean(j,"callOnlyOnce",true);calledByEvent_=Json::boolean(j,"calledByEvent");defaultSleeping_=Json::boolean(j,"sleeping");sleeping_=defaultSleeping_;CCPoint p=Json::point(j,"position"),s=Json::point(j,"scale",ccp(1,1));float w=100*std::max(.01f,std::fabs(s.x)),h=100*std::max(.01f,std::fabs(s.y));bounds_=CCRect(p.x-w*.5f,p.y-h*.5f,w,h);}

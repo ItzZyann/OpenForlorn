@@ -7,6 +7,24 @@
     <Filter Include="Classes">
       <UniqueIdentifier>{bb6c862e-70e9-49d9-81b7-3829a6f50471}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Classes\rapidjson">
+      <UniqueIdentifier>{0ad395b4-b16f-472b-b1e6-2b6fac7acb0c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Classes\rapidjson\error">
+      <UniqueIdentifier>{83152878-d678-4bf6-a919-2af2ffab8e1e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Classes\rapidjson\internal">
+      <UniqueIdentifier>{4ba050f6-fdbb-4360-b20d-4e6dcd24cf86}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Classes\rapidjson\msinttypes">
+      <UniqueIdentifier>{f8a1a64e-bddb-4dc3-9419-cdafbecd1591}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Classes\Triggers">
+      <UniqueIdentifier>{22c8f0dd-136e-4b97-9ccd-827a2af72613}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Classes\particles">
+      <UniqueIdentifier>{d78a3b01-5ba5-4811-952a-e20172a49642}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -53,6 +71,60 @@
     </ClCompile>
     <ClCompile Include="..\Classes\FL_ButtonTrigger.cpp">
       <Filter>Classes</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\ButtonTrigger.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\CameraTrigger.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\CheckpointTrigger.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\FL_TriggerSystem.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\TeleportTrigger.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\Trigger.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\TriggerAICommand.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\TriggerCameraMove.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\TriggerCommand.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\TriggerDeactivate.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\TriggerEvent.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\TriggerEventShake.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\TriggerExitLevel.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\TriggerGroupController.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\TriggerInfoText.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\TriggerOnOff.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\particles\FL_PlayerParticles.cpp">
+      <Filter>Classes\particles</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\particles\FL_ProjectileBreakParticles.cpp">
+      <Filter>Classes\particles</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -112,6 +184,180 @@
     </ClInclude>
     <ClInclude Include="..\Classes\FL_ButtonTrigger.h">
       <Filter>Classes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\FL_PlayerStance.h">
+      <Filter>Classes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\allocators.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\cursorstreamwrapper.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\document.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\encodedstream.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\encodings.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\filereadstream.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\filewritestream.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\fwd.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\istreamwrapper.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\memorybuffer.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\memorystream.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\ostreamwrapper.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\pointer.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\prettywriter.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\rapidjson.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\reader.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\schema.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\stream.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\stringbuffer.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\uri.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\writer.h">
+      <Filter>Classes\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\error\en.h">
+      <Filter>Classes\rapidjson\error</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\error\error.h">
+      <Filter>Classes\rapidjson\error</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\internal\biginteger.h">
+      <Filter>Classes\rapidjson\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\internal\clzll.h">
+      <Filter>Classes\rapidjson\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\internal\diyfp.h">
+      <Filter>Classes\rapidjson\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\internal\dtoa.h">
+      <Filter>Classes\rapidjson\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\internal\ieee754.h">
+      <Filter>Classes\rapidjson\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\internal\itoa.h">
+      <Filter>Classes\rapidjson\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\internal\meta.h">
+      <Filter>Classes\rapidjson\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\internal\pow10.h">
+      <Filter>Classes\rapidjson\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\internal\regex.h">
+      <Filter>Classes\rapidjson\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\internal\stack.h">
+      <Filter>Classes\rapidjson\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\internal\strfunc.h">
+      <Filter>Classes\rapidjson\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\internal\strtod.h">
+      <Filter>Classes\rapidjson\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\internal\swap.h">
+      <Filter>Classes\rapidjson\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\msinttypes\inttypes.h">
+      <Filter>Classes\rapidjson\msinttypes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\rapidjson\msinttypes\stdint.h">
+      <Filter>Classes\rapidjson\msinttypes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\ButtonTrigger.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\CameraTrigger.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\CheckpointTrigger.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\FL_TriggerJson.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\FL_TriggerSystem.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\TeleportTrigger.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\Trigger.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\TriggerAICommand.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\TriggerCameraMove.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\TriggerCommand.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\TriggerDeactivate.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\TriggerEvent.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\TriggerEventShake.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\TriggerExitLevel.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\TriggerGroupController.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\TriggerInfoText.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\TriggerOnOff.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\particles\FL_PlayerParticles.h">
+      <Filter>Classes\particles</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\particles\FL_ProjectileBreakParticles.h">
+      <Filter>Classes\particles</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
