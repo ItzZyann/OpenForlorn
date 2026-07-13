@@ -129,6 +129,36 @@
     <ClCompile Include="..\Classes\LagrangeDescriptor.cpp">
       <Filter>Classes</Filter>
     </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\BlockBouncy.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\MeleeTrigger.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\MovableBlock.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\MovingBlock.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\MovingBlockAction.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\MovingBlockGate.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\MovingBlockGroup.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\RollingBlock.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\ShakyBlock.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Classes\Triggers\TriggerMovableDespawner.cpp">
+      <Filter>Classes\Triggers</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="main.h">
@@ -364,6 +394,36 @@
     </ClInclude>
     <ClInclude Include="..\Classes\LagrangeDescriptor.h">
       <Filter>Classes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\BlockBouncy.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\MeleeTrigger.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\MovableBlock.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\MovingBlock.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\MovingBlockAction.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\MovingBlockGate.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\MovingBlockGroup.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\RollingBlock.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\ShakyBlock.h">
+      <Filter>Classes\Triggers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Classes\Triggers\TriggerMovableDespawner.h">
+      <Filter>Classes\Triggers</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

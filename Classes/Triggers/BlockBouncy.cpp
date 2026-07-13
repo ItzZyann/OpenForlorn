@@ -1,5 +1,12 @@
+#if defined(_WIN32) || defined(_WIN64)
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#endif
+
 #include "BlockBouncy.h"
 #include <algorithm>
+#include <cstring>
 
 BlockBouncy::BlockBouncy():bounceX_(0),bounceY_(0),cooldown_(0),baseScaleX_(1),baseScaleY_(1){}
 BlockBouncy* BlockBouncy::create(const Data&d,float x,float y){BlockBouncy*b=new BlockBouncy;if(b&&b->initBouncy(d,x,y)){b->autorelease();return b;}delete b;return NULL;}

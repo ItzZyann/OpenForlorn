@@ -1,5 +1,13 @@
+#if defined(_WIN32) || defined(_WIN64)
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+
+#endif
+
 #include "MeleeTrigger.h"
 #include <algorithm>
+#include <cstring>
 
 namespace FLTriggers {
 

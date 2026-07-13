@@ -1,3 +1,9 @@
+#if defined(_WIN32) || defined(_WIN64)
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#endif
+
 #include "MovingBlock.h"
 #include "FL_TriggerJson.h"
 #include "MovingBlockAction.h"
@@ -7,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 
 namespace FLTriggers {
 

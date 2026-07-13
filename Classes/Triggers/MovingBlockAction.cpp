@@ -1,7 +1,15 @@
+#if defined(_WIN32) || defined(_WIN64)
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#endif
+
 #include "MovingBlockAction.h"
 #include "FL_TriggerJson.h"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+
 namespace FLTriggers {
 float movingBlockEase(float t,const std::string& name){
     t=std::max(0.f,std::min(1.f,t));const std::string n=Json::lower(name);

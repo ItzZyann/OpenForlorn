@@ -148,10 +148,19 @@ xcopy /Y /Q "$(ProjectDir)..\..\..\external\libwebsockets\win32\lib\*.*" "$(OutD
     <ClCompile Include="..\Classes\LagrangeDescriptor.cpp" />
     <ClCompile Include="..\Classes\particles\FL_PlayerParticles.cpp" />
     <ClCompile Include="..\Classes\particles\FL_ProjectileBreakParticles.cpp" />
+    <ClCompile Include="..\Classes\Triggers\BlockBouncy.cpp" />
     <ClCompile Include="..\Classes\Triggers\ButtonTrigger.cpp" />
     <ClCompile Include="..\Classes\Triggers\CameraTrigger.cpp" />
     <ClCompile Include="..\Classes\Triggers\CheckpointTrigger.cpp" />
     <ClCompile Include="..\Classes\Triggers\FL_TriggerSystem.cpp" />
+    <ClCompile Include="..\Classes\Triggers\MeleeTrigger.cpp" />
+    <ClCompile Include="..\Classes\Triggers\MovableBlock.cpp" />
+    <ClCompile Include="..\Classes\Triggers\MovingBlock.cpp" />
+    <ClCompile Include="..\Classes\Triggers\MovingBlockAction.cpp" />
+    <ClCompile Include="..\Classes\Triggers\MovingBlockGate.cpp" />
+    <ClCompile Include="..\Classes\Triggers\MovingBlockGroup.cpp" />
+    <ClCompile Include="..\Classes\Triggers\RollingBlock.cpp" />
+    <ClCompile Include="..\Classes\Triggers\ShakyBlock.cpp" />
     <ClCompile Include="..\Classes\Triggers\TeleportTrigger.cpp" />
     <ClCompile Include="..\Classes\Triggers\Trigger.cpp" />
     <ClCompile Include="..\Classes\Triggers\TriggerAICommand.cpp" />
@@ -163,6 +172,7 @@ xcopy /Y /Q "$(ProjectDir)..\..\..\external\libwebsockets\win32\lib\*.*" "$(OutD
     <ClCompile Include="..\Classes\Triggers\TriggerExitLevel.cpp" />
     <ClCompile Include="..\Classes\Triggers\TriggerGroupController.cpp" />
     <ClCompile Include="..\Classes\Triggers\TriggerInfoText.cpp" />
+    <ClCompile Include="..\Classes\Triggers\TriggerMovableDespawner.cpp" />
     <ClCompile Include="..\Classes\Triggers\TriggerOnOff.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
@@ -227,11 +237,20 @@ xcopy /Y /Q "$(ProjectDir)..\..\..\external\libwebsockets\win32\lib\*.*" "$(OutD
     <ClInclude Include="..\Classes\rapidjson\stringbuffer.h" />
     <ClInclude Include="..\Classes\rapidjson\uri.h" />
     <ClInclude Include="..\Classes\rapidjson\writer.h" />
+    <ClInclude Include="..\Classes\Triggers\BlockBouncy.h" />
     <ClInclude Include="..\Classes\Triggers\ButtonTrigger.h" />
     <ClInclude Include="..\Classes\Triggers\CameraTrigger.h" />
     <ClInclude Include="..\Classes\Triggers\CheckpointTrigger.h" />
     <ClInclude Include="..\Classes\Triggers\FL_TriggerJson.h" />
     <ClInclude Include="..\Classes\Triggers\FL_TriggerSystem.h" />
+    <ClInclude Include="..\Classes\Triggers\MeleeTrigger.h" />
+    <ClInclude Include="..\Classes\Triggers\MovableBlock.h" />
+    <ClInclude Include="..\Classes\Triggers\MovingBlock.h" />
+    <ClInclude Include="..\Classes\Triggers\MovingBlockAction.h" />
+    <ClInclude Include="..\Classes\Triggers\MovingBlockGate.h" />
+    <ClInclude Include="..\Classes\Triggers\MovingBlockGroup.h" />
+    <ClInclude Include="..\Classes\Triggers\RollingBlock.h" />
+    <ClInclude Include="..\Classes\Triggers\ShakyBlock.h" />
     <ClInclude Include="..\Classes\Triggers\TeleportTrigger.h" />
     <ClInclude Include="..\Classes\Triggers\Trigger.h" />
     <ClInclude Include="..\Classes\Triggers\TriggerAICommand.h" />
@@ -243,6 +262,7 @@ xcopy /Y /Q "$(ProjectDir)..\..\..\external\libwebsockets\win32\lib\*.*" "$(OutD
     <ClInclude Include="..\Classes\Triggers\TriggerExitLevel.h" />
     <ClInclude Include="..\Classes\Triggers\TriggerGroupController.h" />
     <ClInclude Include="..\Classes\Triggers\TriggerInfoText.h" />
+    <ClInclude Include="..\Classes\Triggers\TriggerMovableDespawner.h" />
     <ClInclude Include="..\Classes\Triggers\TriggerOnOff.h" />
     <ClInclude Include="main.h" />
   </ItemGroup>

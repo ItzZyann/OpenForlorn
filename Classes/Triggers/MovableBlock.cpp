@@ -1,4 +1,12 @@
+#if defined(_WIN32) || defined(_WIN64)
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#endif
+
 #include "MovableBlock.h"
+#include <cstring>
+
 MovableBlock::MovableBlock():spawnPosition_(CCPointZero),velocity_(CCPointZero),lastDelta_(CCPointZero),active_(false),trapControlled_(false),ethereal_(false),dead_(false){}
 MovableBlock* MovableBlock::create(const Data&d){MovableBlock*x=new MovableBlock;if(x&&x->initMovable(d)){x->autorelease();return x;}delete x;return NULL;}
 bool MovableBlock::initMovable(const Data&d){if(!FL_Block::init(d))return false;spawnPosition_=d.position;active_=true;return true;}
